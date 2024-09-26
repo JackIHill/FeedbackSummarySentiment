@@ -1,0 +1,4 @@
+nltk==3.9.1
+openai==1.50.0
+pandas==2.2.3
+SQLAlchemy==2.0.35
