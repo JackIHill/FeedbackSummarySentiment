@@ -10,8 +10,8 @@ from SQL_Credentials import username, password, server, database, driver
 from openai import OpenAI
 from OpenAI_API_Key import API_KEY
 
-import SentimentTools as senttools
-import AI_Tools
+import sentimenttools
+import aitools
 
 
 client = OpenAI(api_key=API_KEY)
@@ -34,7 +34,7 @@ while True:
     # This ensures identical ReviewTexts later get given the same sentiment score. 
 
     with engine.begin() as conn:
-        conn.execute(sa.text(AI_Tools.drop_tbl('#review_no_sentiment')))
+        conn.execute(sa.text(aitools.drop_tbl('#review_no_sentiment')))
         conn.execute(sa.text(senttools.insert_unprocessed_sentiment('#review_no_sentiment')))
 
         reviews = senttools.get_remaining_sentiment_rows(offset, num_rows, conn)
@@ -72,7 +72,7 @@ while True:
     review_json = reviews.to_json(orient='records')
 
     prompt = senttools.sentiment_prompt(review_json)
-    output_table = AI_Tools.process_completion(client, prompt, senttools.JSON_FORMAT)
+    output_table = aitools.process_completion(client, prompt, senttools.JSON_FORMAT)
 
     # Sentiment 10 -> 1
     # Sentiment 5 -> 0
@@ -95,8 +95,8 @@ while True:
     if try_count != 3:
         if inputIDs == outputIDs and not invalid_output_sentiment:
             with engine.begin() as conn:
-                conn.execute(sa.text(AI_Tools.drop_tbl('#temp')))
-                AI_Tools.table_to_sqltbl(base_tbl=output_table, sql_tbl_name='#temp', conn=conn)
+                conn.execute(sa.text(aitools.drop_tbl('#temp')))
+                aitools.table_to_sqltbl(base_tbl=output_table, sql_tbl_name='#temp', conn=conn)
 
                 conn.execute(sa.text(senttools.update_review_tbl_query()))
                 completed_rows = senttools.count_completed(conn)
@@ -119,6 +119,6 @@ while True:
     num_rows = DEFAULT_NUM_ROWS
 
     flush = False if remaining <= num_rows else True
-    AI_Tools.print_result(completed, remaining, failed, flush)   
+    aitools.print_result(completed, remaining, failed, flush)   
    
 

@@ -9,8 +9,8 @@ from SQL_Credentials import username, password, server, database, driver
 from openai import OpenAI
 from OpenAI_API_Key import API_KEY
 
-import SummaryTools as summtools
-import AI_Tools
+import summarytools as summtools
+import aitools
 
 client = OpenAI(api_key=API_KEY)
 
@@ -60,7 +60,7 @@ def process_summaries(obj, conn):
 
         prompt = summtools.summary_prompt(input_json, obj.table)
 
-        output_table = AI_Tools.process_completion(client, prompt, summtools.JSON_FORMAT)
+        output_table = aitools.process_completion(client, prompt, summtools.JSON_FORMAT)
         
         # check valid summary length.
         summary = output_table['Summary'].to_list()
@@ -68,8 +68,8 @@ def process_summaries(obj, conn):
 
         if try_count != 3:
             if summary_wordlen <= 50:
-                conn.execute(sa.text(AI_Tools.drop_tbl('#temp')))
-                AI_Tools.table_to_sqltbl(base_tbl=output_table, sql_tbl_name='#temp', conn=conn)
+                conn.execute(sa.text(aitools.drop_tbl('#temp')))
+                aitools.table_to_sqltbl(base_tbl=output_table, sql_tbl_name='#temp', conn=conn)
 
                 conn.execute(sa.text(obj.temp_insert(date_string, id, id2)))
                 completed += 1
@@ -85,7 +85,7 @@ def process_summaries(obj, conn):
         try_count = 1
 
         flush = False if remaining <= 1 else True
-        AI_Tools.print_result(completed, remaining, failed, flush)
+        aitools.print_result(completed, remaining, failed, flush)
 
 
 with engine.begin() as conn:
@@ -97,14 +97,14 @@ with engine.begin() as conn:
     date_int = int(dateid_tbl['DateID'][0])
 
 
-    AI_Tools.drop_tbl('#SummaryVenue')
-    AI_Tools.create_temp_headers(conn, '#SummaryVenue', 'Summary_Venue')
+    aitools.drop_tbl('#SummaryVenue')
+    aitools.create_temp_headers(conn, '#SummaryVenue', 'Summary_Venue')
 
-    AI_Tools.drop_tbl('#SummaryOperator')
-    AI_Tools.create_temp_headers(conn, '#SummaryOperator', 'Summary_Operator')
+    aitools.drop_tbl('#SummaryOperator')
+    aitools.create_temp_headers(conn, '#SummaryOperator', 'Summary_Operator')
 
-    AI_Tools.drop_tbl('#SummaryRegion')
-    AI_Tools.create_temp_headers(conn, '#SummaryRegion', 'Summary_Region')
+    aitools.drop_tbl('#SummaryRegion')
+    aitools.create_temp_headers(conn, '#SummaryRegion', 'Summary_Region')
     
 
     process_summaries(summtools.VenueSummary(), conn)
