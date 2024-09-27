@@ -10,7 +10,7 @@ from SQL_Credentials import username, password, server, database, driver
 from openai import OpenAI
 from OpenAI_API_Key import API_KEY
 
-import sentimenttools
+import sentimenttools as senttools
 import aitools
 
 
