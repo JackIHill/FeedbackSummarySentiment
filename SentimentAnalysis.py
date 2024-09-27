@@ -5,13 +5,13 @@ from nltk import download
 from nltk.corpus import stopwords
 
 import sqlalchemy as sa
-from SQL_Credentials import username, password, server, database, driver
+from credentials.SQL_Credentials import username, password, server, database, driver
 
 from openai import OpenAI
-from OpenAI_API_Key import API_KEY
+from credentials.OpenAI_API_Key import API_KEY
 
-import sentimenttools as senttools
-import aitools
+import tools.sentimenttools as senttools
+import tools.aitools as aitools
 
 
 client = OpenAI(api_key=API_KEY)
@@ -49,7 +49,7 @@ while True:
     __location__ = os.path.realpath(
                 os.path.join(os.getcwd(), os.path.dirname(__file__)))
 
-    allowed_stops_file = open(os.path.join(__location__, 'AllowedStopWords.csv'))
+    allowed_stops_file = open(os.path.join(__location__, r'tools/AllowedStopWords.csv'))
     allowed_stops = pd.read_csv(allowed_stops_file)['AllowedWords'].tolist()
 
     stop = [s for s in stopwords.words('english') if s not in allowed_stops]

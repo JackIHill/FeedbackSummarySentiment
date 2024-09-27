@@ -4,13 +4,13 @@ from nltk import download
 from nltk.corpus import stopwords
 
 import sqlalchemy as sa
-from SQL_Credentials import username, password, server, database, driver
+from credentials.SQL_Credentials import username, password, server, database, driver
 
 from openai import OpenAI
-from OpenAI_API_Key import API_KEY
+from credentials.OpenAI_API_Key import API_KEY
 
-import summarytools as summtools
-import aitools
+import tools.summarytools as summtools
+import tools.aitools as aitools
 
 client = OpenAI(api_key=API_KEY)
 
