@@ -20,10 +20,10 @@ def insert_reviews(temptbl, unprocessed_sentiment=True):
             """
     return query
 
-def get_remaining_sentiment_rows(offset, num_rows, conn):
+def get_remaining_sentiment_rows(from_tbl, offset, num_rows, conn):
     query = f"""
             SELECT ReviewID, ReviewText
-            FROM #review_no_sentiment
+            FROM {from_tbl}
             WHERE rn = 1
             ORDER BY ReviewID DESC
             OFFSET {offset} ROWS

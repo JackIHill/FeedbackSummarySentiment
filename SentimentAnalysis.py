@@ -29,12 +29,12 @@ num_rows = DEFAULT_NUM_ROWS
 while True:
     # Grab the first num_rows distinct ReviewTexts that don't have sentiment scores.
     # This ensures identical ReviewTexts later get given the same sentiment score. 
-
+    temp_name = '#review_no_sentiment'
     with engine.begin() as conn:
-        conn.execute(sa.text(aitools.drop_tbl('#review_no_sentiment')))
-        conn.execute(sa.text(senttools.insert_reviews('#review_no_sentiment')))
+        conn.execute(sa.text(aitools.drop_tbl(temp_name)))
+        conn.execute(sa.text(senttools.insert_reviews(temp_name)))
 
-        reviews = senttools.get_remaining_sentiment_rows(offset, num_rows, conn)
+        reviews = senttools.get_remaining_sentiment_rows(temp_name, offset, num_rows, conn)
         remaining = senttools.get_count_remaining(conn)
 
 
