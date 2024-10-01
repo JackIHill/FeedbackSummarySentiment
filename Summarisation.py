@@ -83,27 +83,31 @@ def process_summaries(obj, conn):
         aitools.print_result(completed, remaining, failed, flush)
 
 
-with engine.begin() as conn:
-    dateid_tbl = pd.read_sql(sa.text(MMM_YYtoDate), conn)
-    date_string = str(dateid_tbl['ActualDate'][0])
+def main():
+    with engine.begin() as conn:
+        dateid_tbl = pd.read_sql(sa.text(MMM_YYtoDate), conn)
+        date_string = str(dateid_tbl['ActualDate'][0])
 
-    dateid_intquery = f"SELECT DateID FROM Dates d where d.ActualDate = '{date_string}'"
-    dateid_tbl = pd.read_sql(sa.text(dateid_intquery), conn)
-    date_int = int(dateid_tbl['DateID'][0])
+        dateid_intquery = f"SELECT DateID FROM Dates d where d.ActualDate = '{date_string}'"
+        dateid_tbl = pd.read_sql(sa.text(dateid_intquery), conn)
+        date_int = int(dateid_tbl['DateID'][0])
 
 
-    aitools.drop_tbl('#SummaryVenue')
-    aitools.create_temp_headers(conn, '#SummaryVenue', 'Summary_Venue')
+        aitools.drop_tbl('#SummaryVenue')
+        aitools.create_temp_headers(conn, '#SummaryVenue', 'Summary_Venue')
 
-    aitools.drop_tbl('#SummaryOperator')
-    aitools.create_temp_headers(conn, '#SummaryOperator', 'Summary_Operator')
+        aitools.drop_tbl('#SummaryOperator')
+        aitools.create_temp_headers(conn, '#SummaryOperator', 'Summary_Operator')
 
-    aitools.drop_tbl('#SummaryRegion')
-    aitools.create_temp_headers(conn, '#SummaryRegion', 'Summary_Region')
-    
+        aitools.drop_tbl('#SummaryRegion')
+        aitools.create_temp_headers(conn, '#SummaryRegion', 'Summary_Region')
+        
 
-    process_summaries(summtools.VenueSummary(), conn)
-    process_summaries(summtools.OperatorSummary(), conn)
-    process_summaries(summtools.RegionSummary(), conn)
-    
-    conn.execute(sa.text(summtools.final_insert(conn)))
+        process_summaries(summtools.VenueSummary(), conn)
+        process_summaries(summtools.OperatorSummary(), conn)
+        process_summaries(summtools.RegionSummary(), conn)
+        
+        conn.execute(sa.text(summtools.final_insert(conn)))
+
+if __name__ == '__main__':
+    main()

@@ -32,7 +32,7 @@ while True:
 
     with engine.begin() as conn:
         conn.execute(sa.text(aitools.drop_tbl('#review_no_sentiment')))
-        conn.execute(sa.text(senttools.insert_unprocessed_sentiment('#review_no_sentiment')))
+        conn.execute(sa.text(senttools.insert_reviews('#review_no_sentiment')))
 
         reviews = senttools.get_remaining_sentiment_rows(offset, num_rows, conn)
         remaining = senttools.get_count_remaining(conn)

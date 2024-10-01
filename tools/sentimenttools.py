@@ -1,15 +1,21 @@
 import pandas as pd
 import sqlalchemy as sa
 
-def insert_unprocessed_sentiment(temptbl): 
+def insert_reviews(temptbl, unprocessed_sentiment=True): 
+    join = ''
+    if unprocessed_sentiment:
+        join = """
+            INNER JOIN Sentiment s
+                ON s.SentimentID = r.ReviewSentimentID
+                AND s.SentimentText = 'Unknown - Unprocessed' 
+            """
+    
     query = f"""
             SELECT r.ReviewID, r.ReviewText
                     ,ROW_NUMBER() OVER (PARTITION BY r.ReviewText ORDER BY r.ReviewID DESC) as rn
             INTO {temptbl}
             FROM Review r
-            INNER JOIN Sentiment s
-                ON s.SentimentID = r.ReviewSentimentID
-                AND s.SentimentText = 'Unknown - Unprocessed' 
+            {join}
             WHERE r.ReviewText IS NOT NULL
             """
     return query

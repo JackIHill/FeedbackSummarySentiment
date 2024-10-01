@@ -2,6 +2,7 @@
 
 /credentials/OpenAI_API_Key.py
 /credentials/SQL_Credentials.py
+/PhraseSentimentFlag.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
