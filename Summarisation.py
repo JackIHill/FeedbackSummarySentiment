@@ -12,12 +12,7 @@ from credentials.OpenAI_API_Key import API_KEY
 import tools.summarytools as summtools
 import tools.aitools as aitools
 
-client = OpenAI(api_key=API_KEY)
-
-connection_url = f"mssql+pyodbc://{username}:{password}@{server}/{database}?driver={driver}"
-engine = sa.create_engine(connection_url)
-
-download('stopwords')
+client, engine = aitools.establish_connection(API_KEY, username, password, server, database, driver)
 
 YEAR_MONTH = 'SEP-24'
 

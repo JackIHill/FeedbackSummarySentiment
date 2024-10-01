@@ -14,15 +14,12 @@ import tools.sentimenttools as senttools
 import tools.aitools as aitools
 
 
-client = OpenAI(api_key=API_KEY)
-
-connection_url = f"mssql+pyodbc://{username}:{password}@{server}/{database}?driver={driver}"
-engine = sa.create_engine(connection_url)
+client, engine = aitools.establish_connection(API_KEY, username, password, server, database, driver)
 
 download('stopwords')
 
 DEFAULT_NUM_ROWS = 40
-MIN_SCRAPE_DATEID = 20240922
+# MIN_SCRAPE_DATEID = 20240922
 
 completed = 0
 failed = 0
