@@ -18,8 +18,8 @@ client, engine = aitools.establish_connection(API_KEY, username, password, serve
 
 download('stopwords')
 
-DEFAULT_NUM_ROWS = 40
-MIN_SCRAPE_DATEID = 20230101
+DEFAULT_NUM_ROWS = 10
+MIN_REVIEW_DATEID = 20230101
 
 completed = 0
 failed = 0
@@ -32,10 +32,10 @@ while True:
     review_temp_name = '#review_no_sentiment'
     with engine.begin() as conn:
         conn.execute(sa.text(aitools.drop_tbl(review_temp_name)))
-        conn.execute(sa.text(senttools.insert_reviews(review_temp_name)))
+        conn.execute(sa.text(senttools.insert_reviews(review_temp_name, MIN_REVIEW_DATEID)))
 
         reviews = senttools.get_remaining_sentiment_rows(review_temp_name, offset, num_rows, conn)
-        remaining = senttools.get_count_remaining(conn)
+        remaining = senttools.get_count_remaining(conn, MIN_REVIEW_DATEID)
 
 
     raw_reviews = reviews['ReviewText']

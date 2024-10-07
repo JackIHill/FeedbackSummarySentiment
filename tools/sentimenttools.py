@@ -2,14 +2,16 @@ import pandas as pd
 import sqlalchemy as sa
 
 def min_date_query(min_review_dateid):
-    return f"""AND Review_DateID >= {min_review_dateid}"""
+    where = ''
+    if min_review_dateid:
+        where = f"""AND Review_DateID >= {min_review_dateid}"""
+    return where 
 
-
-def insert_reviews(temptbl, phrase=False, min_review_dateid=None): 
+def insert_reviews(temptbl, min_review_dateid=None, phrase=False): 
     where = ''
     join = ''
-    if min_review_dateid:
-        where_date = min_date_query(min_review_dateid)
+    where_date = min_date_query(min_review_dateid)
+
     if phrase:
         where = """AND ReviewID NOT IN (SELECT ReviewID FROM Phrase_SentimentReview)"""
     else:
@@ -47,11 +49,11 @@ def get_remaining_sentiment_rows(from_tbl, offset, num_rows, conn):
     return rows 
 
 
-def get_count_remaining(conn, phrase=False, min_review_dateid=None):
+def get_count_remaining(conn, min_review_dateid=None, phrase=False):
     where = ''
     join = ''
-    if min_review_dateid:
-        where_date = min_date_query(min_review_dateid)
+    where_date = min_date_query(min_review_dateid)
+
     if phrase:
         where = """AND ReviewID NOT IN (SELECT ReviewID FROM Phrase_SentimentReview)"""
     else:
@@ -70,7 +72,6 @@ def get_count_remaining(conn, phrase=False, min_review_dateid=None):
             """
     
     count = int(pd.read_sql(sa.text(query), conn).to_string(index=False).strip())
-
     return count
 
 def sentiment_prompt(json):
