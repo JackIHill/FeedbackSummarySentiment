@@ -21,8 +21,6 @@ download('stopwords')
 DEFAULT_NUM_ROWS = 10
 MIN_REVIEW_DATEID = 20230101
 
-#test
-
 completed = 0
 failed = 0
 offset = 0
@@ -37,6 +35,8 @@ while True:
         conn.execute(sa.text(senttools.insert_reviews(review_temp_name, MIN_REVIEW_DATEID)))
 
         reviews = senttools.get_remaining_sentiment_rows(review_temp_name, offset, num_rows, conn)
+        # this can be improved, currently queries the full Review table rather
+        # than a temp - do a running calc.
         remaining = senttools.get_count_remaining(conn, MIN_REVIEW_DATEID)
 
 

@@ -7,10 +7,17 @@ def min_date_query(min_review_dateid):
         where = f"""AND Review_DateID >= {min_review_dateid}"""
     return where 
 
-def insert_reviews(temptbl, min_review_dateid=None, phrase=False): 
+
+def insert_reviews(temptbl, min_review_dateid=None, operator_list=None, phrase=False): 
     where = ''
     join = ''
     where_date = min_date_query(min_review_dateid)
+
+    if operator_list:
+        operators = str(set(operator_list))[1:-1]
+        op_join = """INNER JOIN Venue v ON r.VenueID = v.VenueID
+                    INNER JOIN vw_VenueExport vw ON vw.OperatorVenueCode = v.OperatorVenueCode"""
+        where_op = f"""AND vw.OperatorName in ({operators})"""
 
     if phrase:
         where = """AND ReviewID NOT IN (SELECT ReviewID FROM Phrase_SentimentReview)"""
@@ -27,8 +34,10 @@ def insert_reviews(temptbl, min_review_dateid=None, phrase=False):
             INTO {temptbl}
             FROM Review r
             {join}
+            {op_join}
             WHERE 1=1 
             {where}
+            {where_op}
             {where_date}
             AND r.ReviewText IS NOT NULL
             """
@@ -49,10 +58,18 @@ def get_remaining_sentiment_rows(from_tbl, offset, num_rows, conn):
     return rows 
 
 
-def get_count_remaining(conn, min_review_dateid=None, phrase=False):
+def get_count_remaining(conn, min_review_dateid=None, operator_list=None, phrase=False):
+    # when move to ORM, add **kwargs for where clause.
     where = ''
     join = ''
     where_date = min_date_query(min_review_dateid)
+
+    # not including join as default to save processing time
+    if operator_list:
+        operators = str(set(operator_list))[1:-1]
+        op_join = """INNER JOIN Venue v ON r.VenueID = v.VenueID
+                    INNER JOIN vw_VenueExport vw ON vw.OperatorVenueCode = v.OperatorVenueCode"""
+        where_op = f"""AND vw.OperatorName in ({operators})"""
 
     if phrase:
         where = """AND ReviewID NOT IN (SELECT ReviewID FROM Phrase_SentimentReview)"""
@@ -65,8 +82,10 @@ def get_count_remaining(conn, min_review_dateid=None, phrase=False):
             SELECT count(ReviewID)
             FROM Review r
             {join}
+            {op_join}
             WHERE 1=1 
             {where}
+            {where_op}
             {where_date}
             AND r.ReviewText IS NOT NULL
             """
