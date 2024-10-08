@@ -26,7 +26,7 @@ def process_completion(client, prompt, json_format):
         )
 
     event = completion.choices[0].message.content
-    json_name = list(json.loads(event).keys())[0]
+    json_name = list(json.loads(fr"{event}").keys())[0]
 
     output_json = json.loads(event)[f'{json_name}']
     output_table = pd.DataFrame(pd.json_normalize(output_json))
