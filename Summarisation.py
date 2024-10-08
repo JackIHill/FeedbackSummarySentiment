@@ -20,7 +20,7 @@ MMM_YYtoDate = f"""
             SELECT ActualDate FROM Dates WHERE ActualDate = CONVERT(DATE, CONCAT('01-', '{YEAR_MONTH}'))
             """
 
-def process_summaries(obj, conn):
+def process_summaries(obj, conn, date_int, date_string):
     completed = 0
     failed = 0
     offset = 0
@@ -92,7 +92,6 @@ def main():
         dateid_tbl = pd.read_sql(sa.text(dateid_intquery), conn)
         date_int = int(dateid_tbl['DateID'][0])
 
-
         aitools.drop_tbl('#SummaryVenue')
         aitools.create_temp_headers(conn, '#SummaryVenue', 'Summary_Venue')
 
@@ -103,9 +102,9 @@ def main():
         aitools.create_temp_headers(conn, '#SummaryRegion', 'Summary_Region')
         
 
-        process_summaries(summtools.VenueSummary(), conn)
-        process_summaries(summtools.OperatorSummary(), conn)
-        process_summaries(summtools.RegionSummary(), conn)
+        process_summaries(summtools.VenueSummary(), conn, date_int, date_string)
+        process_summaries(summtools.OperatorSummary(), conn, date_int, date_string)
+        process_summaries(summtools.RegionSummary(), conn, date_int, date_string)
         
         conn.execute(sa.text(summtools.final_insert(conn)))
 
