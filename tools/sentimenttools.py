@@ -235,76 +235,76 @@ def delete_completed_from_temp(temp_name, delete_list):
 
 
 JSON_FORMAT = {
-    "type": "json_schema",
-    "json_schema": {
-        "name": "review_sentiment",
-        "schema": {
-            "type": "object",
-                "properties": {
-                    "review_sentiment": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "ReviewID": {
-                                    "type": "number"
+    'type': 'json_schema',
+    'json_schema': {
+        'name': 'review_sentiment',
+        'schema': {
+            'type': 'object',
+                'properties': {
+                    'review_sentiment': {
+                        'type': 'array',
+                        'items': {
+                            'type': 'object',
+                            'properties': {
+                                'ReviewID': {
+                                    'type': 'number'
                                 },
-                                "Sentiment": {
-                                    "type": "number"
+                                'Sentiment': {
+                                    'type': 'number'
                                 }
                             },
-                            "required": [
-                                "ReviewID",
-                                "Sentiment"
+                            'required': [
+                                'ReviewID',
+                                'Sentiment'
                                 ],
-                            "additionalProperties": False
+                            'additionalProperties': False
                         
                         } 
                 }
             },
-            "required": ["review_sentiment"],
-            "additionalProperties": False
+            'required': ['review_sentiment'],
+            'additionalProperties': False
         }  
-        ,"strict": True
+        ,'strict': True
     }       
 }
 
 
 JSON_FORMAT_Phrase = {
-    "type": "json_schema",
-    "json_schema": {
-        "name": "review_sentiment",
-        "schema": {
-            "type": "object",
-                "properties": {
-                    "review_sentiment": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "ReviewID": {
-                                    "type": "number"
+    'type': 'json_schema',
+    'json_schema': {
+        'name': 'review_sentiment',
+        'schema': {
+            'type': 'object',
+                'properties': {
+                    'review_sentiment': {
+                        'type': 'array',
+                        'items': {
+                            'type': 'object',
+                            'properties': {
+                                'ReviewID': {
+                                    'type': 'number'
                                 },
-                                "PhraseFlag": {
-                                    "type": "number"
+                                'PhraseFlag': {
+                                    'type': 'number'
                                 },
-                                 "Sentiment": {
-                                    "type": "number"
+                                 'Sentiment': {
+                                    'type': 'number'
                                 }
                             },
-                            "required": [
-                                "ReviewID",
-                                "PhraseFlag",
-                                "Sentiment"
+                            'required': [
+                                'ReviewID',
+                                'PhraseFlag',
+                                'Sentiment'
                                 ],
-                            "additionalProperties": False
+                            'additionalProperties': False
                         
                         } 
                 }
             },
-            "required": ["review_sentiment"],
-            "additionalProperties": False
+            'required': ['review_sentiment'],
+            'additionalProperties': False
         }  
-        ,"strict": True
+        ,'strict': True
     }       
 }

@@ -21,12 +21,17 @@ def process_completion(client, prompt, json_format):
             {"role": "user", "content": prompt}
         ],
         response_format=json_format,
-        temperature=0,
+        temperature=0
         # max_tokens=500
         )
 
-    event = completion.choices[0].message.content
-    json_name = list(json.loads(fr"{event}").keys())[0]
+    try:
+        event = fr"""{completion.choices[0].message.content}"""
+    except json.decoder.JSONDecodeError:
+        print(f'API call failure: Prompt: {prompt} \n Completion: {completion}')
+        return None
+    
+    json_name = list(json.loads(event).keys())[0]
 
     output_json = json.loads(event)[f'{json_name}']
     output_table = pd.DataFrame(pd.json_normalize(output_json))
