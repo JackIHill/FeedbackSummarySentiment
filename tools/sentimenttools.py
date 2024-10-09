@@ -114,14 +114,18 @@ def phrase_prompt(json, phrase):
             The following JSON contains restaurant reviews (ReviewText).
             Each review is a separate entry.
             For each review, if the review mentions {phrase} or any synonyms, return 1. Otherwise, return 0.
-            This value is PhraseFlag.
+            This result is PhraseFlag.
 
-            If PhraseFlag = 1, evaluate the sentiment towards the {phrase}, using the following keys:
+            If PhraseFlag = 1, evaluate the sentiment towards the {phrase} or any synonyms, using the following keys:
             10 = positive,
             0 = negative,
             5 = neutral,
             -1 = unknown.
-            This value is Sentiment.
+            This result is Sentiment.
+
+            For example, if the review is like '{phrase} was great!', sentiment should = 10.
+            For example, if the review is like 'bad {phrase}', sentiment should = 0.
+            For example, if the review is like '{phrase} was fine', sentiment should = 5
 
             Return the ReviewID for the corresponding ReviewText, the PhraseFlag, and Sentiment.
             Ensure the returned ReviewID is in the input list of ReviewID and all input ReviewIDs are returned.
