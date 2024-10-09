@@ -16,7 +16,7 @@ import tools.aitools as aitools
 
 client, engine = aitools.establish_connection(API_KEY, username, password, server, database, driver)
 
-download('stopwords')
+stops = aitools.get_stops()
 
 DEFAULT_NUM_ROWS = 10
 MIN_REVIEW_DATEID = 20230101
@@ -45,17 +45,10 @@ while True:
         print('Sentiment rating for all Reviews has been completed.')
         break
 
-    __location__ = os.path.realpath(
-                os.path.join(os.getcwd(), os.path.dirname(__file__)))
-
-    allowed_stops_file = open(os.path.join(__location__, r'tools/AllowedStopWords.csv'))
-    allowed_stops = pd.read_csv(allowed_stops_file)['AllowedWords'].tolist()
-
-    stop = [s for s in stopwords.words('english') if s not in allowed_stops]
 
     # Reduces text length by approx 20% = 20% less token usage for minimal cost in accuracy.
     reviews.ReviewText = reviews.ReviewText.apply(
-                                lambda x: ' '.join([word for word in x.split() if word not in (stop)])
+                                lambda x: ' '.join([word for word in x.split() if word not in (stops)])
                                 )
 
     # retain only alpha chars
@@ -63,7 +56,7 @@ while True:
 
     # get first 20 words of each review to limit token usage.
     # Generally enough words to get a good read on sentiment
-    reviews.ReviewText = reviews.ReviewText.apply(lambda x: ' '.join(x.split()[:20]))
+    # reviews.ReviewText = reviews.ReviewText.apply(lambda x: ' '.join(x.split()[:20]))
 
     # Get average length of reviewtext after sanitisation
     # print(reviews.ReviewText.apply(len).mean())

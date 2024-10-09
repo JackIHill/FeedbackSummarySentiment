@@ -1,7 +1,11 @@
+import os
 import json
 import pandas as pd
 import sqlalchemy as sa
 from openai import OpenAI
+from nltk import download
+from nltk.corpus import stopwords
+
 
 def drop_tbl(tbl_name):
     query = f"""
@@ -51,3 +55,16 @@ def establish_connection(API_KEY, sql_user, sql_pass, sql_server, sql_db, sql_dr
     connection_url = f"mssql+pyodbc://{sql_user}:{sql_pass}@{sql_server}/{sql_db}?driver={sql_driver}"
     engine = sa.create_engine(connection_url)
     return client, engine
+    
+
+def get_stops():
+    download('stopwords')
+
+    __location__ = os.path.realpath(
+                os.path.join(os.getcwd(), os.path.dirname(__file__)))
+
+    allowed_stops_file = open(os.path.join(__location__, r'AllowedStopWords.csv'))
+    allowed_stops = pd.read_csv(allowed_stops_file)['AllowedWords'].tolist()
+
+    stops = [s for s in stopwords.words('english') if s not in allowed_stops]
+    return stops
