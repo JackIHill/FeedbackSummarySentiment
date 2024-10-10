@@ -84,7 +84,8 @@ class OperatorSummary():
                     inner join Venue v on v.VenueID = sv.VenueID
                     inner join Brand b on b.BrandID = v.BrandID
                     inner join Operator o on o.OperatorID = b.OperatorID
-                    LEFT JOIN #SummaryOperator so on so.OperatorID = o.OperatorID and sv.DateID = {date_int}
+                    LEFT JOIN #SummaryOperator so on so.OperatorID = o.OperatorID
+                                                 and so.DateID = {date_int}
                     WHERE so.OperatorID is null
                 ) rem_op
             """
@@ -123,7 +124,6 @@ class OperatorSummary():
                 WHERE NOT EXISTS (
                         SELECT * FROM #SummaryOperator
                         WHERE #SummaryOperator.OperatorID = {operatorid} AND
-
                             #SummaryOperator.DateID = d.DateID
                         )
                 """
@@ -168,7 +168,9 @@ class RegionSummary():
                 inner join Operator o on o.OperatorID = b.OperatorID
                 inner join Postcode p on p.PostcodeID = v.PostcodeID
                 inner join Region reg on reg.RegionID = p.RegionID and Region <> '-'
-                LEFT JOIN #SummaryRegion sr on sr.RegionID = reg.RegionID and sv.DateID = {date_int}
+                LEFT JOIN #SummaryRegion sr on sr.RegionID = reg.RegionID
+                                          and sr.OperatorID = o.OperatorID
+                                          and sv.DateID = {date_int}
                 WHERE sr.RegionSummaryID IS NULL
             )
             select VenueID, VenueSummary, x.OperatorID, DateID, x.RegionID from cte
@@ -216,30 +218,31 @@ def summary_prompt(json, category):
     return prompt
 
 
-def final_insert(conn):
+def final_insert():
     query = """
             INSERT INTO Summary_Operator (OperatorSummary, DateID, OperatorID)
             SELECT OperatorSummary, DateID, OperatorID
             FROM #SummaryOperator so
             WHERE NOT EXISTS (SELECT * FROM Summary_Operator s_o
                             WHERE s_o.DateID = so.DateID AND
-                                    s_o.OperatorID = so.OperatorID)                         
+                                  s_o.OperatorID = so.OperatorID)                         
 
+                                    
             INSERT INTO Summary_Region (RegionSummary, DateID, RegionID, OperatorID)
             SELECT RegionSummary, DateID, RegionID, OperatorID
             FROM #SummaryRegion sr                    
             WHERE NOT EXISTS (SELECT * FROM Summary_Region s_r
                             WHERE s_r.DateID = sr.DateID AND
-                                    s_r.OperatorID = sr.OperatorID AND
-                                    s_r.RegionID = sr.RegionID)                         
+                                  s_r.OperatorID = sr.OperatorID AND
+                                  s_r.RegionID = sr.RegionID)                         
 
-
+                                            
             INSERT INTO Summary_Venue (VenueSummary, DateID, VenueID, RegionSummaryID, OperatorSummaryID) 
             SELECT sv.VenueSummary, sv.DateID, sv.VenueID, sr.RegionSummaryID, so.OperatorSummaryID
             FROM #SummaryVenue sv
             INNER JOIN Venue v ON v.VenueID = sv.VenueID
             INNER JOIN Brand b ON b.BrandID = v.BrandID
-            INNER JOIN Operator o ON o.OperatorID = o.OperatorID
+            INNER JOIN Operator o ON o.OperatorID = b.OperatorID
             INNER JOIN Postcode p ON p.PostcodeID = v.PostcodeID                     
             INNER JOIN Region r ON r.RegionID = p.RegionID
             INNER JOIN #SummaryRegion sr ON sr.RegionID = r.RegionID AND
@@ -249,7 +252,7 @@ def final_insert(conn):
                                             so.DateID = sv.DateID
             WHERE NOT EXISTS (SELECT * FROM Summary_Venue s_v
                             WHERE s_v.DateID = sv.DateID AND
-                                    s_v.VenueID = sv.VenueID)                                            
+                                  s_v.VenueID = sv.VenueID)                                            
             """
     return query
 

@@ -1,7 +1,5 @@
 
 import pandas as pd
-from nltk import download
-from nltk.corpus import stopwords
 
 import sqlalchemy as sa
 from credentials.SQL_Credentials import username, password, server, database, driver
@@ -27,14 +25,13 @@ def process_summaries(obj, conn, date_int, date_string):
     try_count = 1    
     while True:
         
-        # Grab all non-null ReviewText reviews for a venue. 
-        remaining = obj.get_count_remaining(conn, date_int, date_string)
-
-        
-        if remaining == 0:
+        remaining = obj.get_count_remaining(conn, date_int, date_string) - failed
+      
+        if remaining == 0: 
             print(f'All {obj.table}s Summarised For {YEAR_MONTH.title()}.')
             break
         
+        # Grab all non-null ReviewText reviews for a venue. 
         input_tbl = obj.get_remaining_rows(conn, date_int, date_string, offset)
 
         if obj.__class__.__name__ == 'VenueSummary': 
@@ -45,7 +42,6 @@ def process_summaries(obj, conn, date_int, date_string):
         else: 
             # feed venue summaries and create operator summaries from them
             input_json = input_tbl["VenueSummary"].to_json(orient='records')
-
 
         id2 = None
         if obj.__class__.__name__ == 'RegionSummary':
@@ -100,13 +96,12 @@ def main():
 
         aitools.drop_tbl('#SummaryRegion')
         aitools.create_temp_headers(conn, '#SummaryRegion', 'Summary_Region')
-        
 
         process_summaries(summtools.VenueSummary(), conn, date_int, date_string)
         process_summaries(summtools.OperatorSummary(), conn, date_int, date_string)
         process_summaries(summtools.RegionSummary(), conn, date_int, date_string)
         
-        conn.execute(sa.text(summtools.final_insert(conn)))
+        conn.execute(sa.text(summtools.final_insert()))
 
 if __name__ == '__main__':
     main()
