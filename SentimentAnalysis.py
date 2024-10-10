@@ -1,9 +1,4 @@
-
-import os
 import pandas as pd
-from nltk import download
-from nltk.corpus import stopwords
-
 import sqlalchemy as sa
 from credentials.SQL_Credentials import username, password, server, database, driver
 

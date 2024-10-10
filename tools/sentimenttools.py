@@ -8,16 +8,22 @@ def min_date_query(min_review_dateid):
     return where 
 
 
-def insert_reviews(temptbl, min_review_dateid=None, operator_list=None, phrase=False): 
-    where = ''
-    join = ''
-    where_date = min_date_query(min_review_dateid)
-
+def operator_join_where(operator_list):
+    op_join = where_op = ''
     if operator_list:
         operators = str(set(operator_list))[1:-1]
         op_join = """INNER JOIN Venue v ON r.VenueID = v.VenueID
                     INNER JOIN vw_VenueExport vw ON vw.OperatorVenueCode = v.OperatorVenueCode"""
         where_op = f"""AND vw.OperatorName in ({operators})"""
+     
+    return op_join, where_op
+
+
+def insert_reviews(temptbl, min_review_dateid=None, operator_list=None, phrase=False): 
+    where = ''
+    join = ''
+    where_date = min_date_query(min_review_dateid)
+    op_join, where_op = operator_join_where(operator_list)
 
     if phrase:
         where = """AND ReviewID NOT IN (SELECT ReviewID FROM Phrase_SentimentReview)"""
@@ -63,13 +69,7 @@ def get_count_remaining(conn, min_review_dateid=None, operator_list=None, phrase
     where = ''
     join = ''
     where_date = min_date_query(min_review_dateid)
-
-    # not including join as default to save processing time
-    if operator_list:
-        operators = str(set(operator_list))[1:-1]
-        op_join = """INNER JOIN Venue v ON r.VenueID = v.VenueID
-                    INNER JOIN vw_VenueExport vw ON vw.OperatorVenueCode = v.OperatorVenueCode"""
-        where_op = f"""AND vw.OperatorName in ({operators})"""
+    op_join, where_op = operator_join_where(operator_list)
 
     if phrase:
         where = """AND ReviewID NOT IN (SELECT ReviewID FROM Phrase_SentimentReview)"""
