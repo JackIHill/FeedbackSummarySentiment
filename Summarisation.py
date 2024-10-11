@@ -43,16 +43,21 @@ def process_summaries(obj, conn, date_int, date_string):
             # feed venue summaries and create operator summaries from them
             input_json = input_tbl["VenueSummary"].to_json(orient='records')
 
-        id2 = None
+        FK_ID = None
+        unknown_region = None
         if obj.__class__.__name__ == 'RegionSummary':
-            id2 = summtools.get_unique_ids(input_tbl, summtools.OperatorSummary().idcol)
+            FK_ID = summtools.get_unique_ids(input_tbl, obj.foreign_key)
+            unknown_region = summtools.getid_fromvalue(obj, '-', conn)
 
-        id = summtools.get_unique_ids(input_tbl, obj.idcol)
+        PK_ID = summtools.get_unique_ids(input_tbl, obj.primary_key)
 
-        prompt = summtools.summary_prompt(input_json, obj.table)
+        if PK_ID == unknown_region:
+            output_table = pd.DataFrame({'Summary': ['-']})
+        else:
+            prompt = summtools.summary_prompt(input_json, obj.table)
+            output_table = aitools.process_completion(client, prompt, summtools.JSON_FORMAT)
 
-        output_table = aitools.process_completion(client, prompt, summtools.JSON_FORMAT)
-        
+    
         # check valid summary length.
         summary = output_table['Summary'].to_list()
         summary_wordlen = len(summary[0].split(' '))
@@ -62,7 +67,7 @@ def process_summaries(obj, conn, date_int, date_string):
                 conn.execute(sa.text(aitools.drop_tbl('#temp')))
                 aitools.table_to_sqltbl(base_tbl=output_table, sql_tbl_name='#temp', conn=conn)
 
-                conn.execute(sa.text(obj.temp_insert(date_string, id, id2)))
+                conn.execute(sa.text(obj.temp_insert(date_string, PK_ID, FK_ID)))
                 completed += 1
             else:
                 try_count += 1

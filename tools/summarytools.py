@@ -4,7 +4,7 @@ import sqlalchemy as sa
 class VenueSummary():
     def __init__(self):
         self.table = 'Venue'
-        self.idcol = 'VenueID'
+        self.primary_key = 'VenueID'
         
     def get_count_remaining(self, conn, date_int, date_string=None):
         query =  f"""
@@ -21,6 +21,11 @@ class VenueSummary():
             WHERE ReviewText IS NOT NULL AND 
                 sv.VenueSummaryID IS NULL AND
                 YEAR(rev.ActualDate) = YEAR('{date_string}') and MONTH(rev.ActualDate) = MONTH('{date_string}')
+                AND NOT EXISTS (
+                    SELECT * FROM Summary_Venue s_v
+                    WHERE x.VenueID = s_v.VenueID
+                    AND s_v.DateID = {date_int}
+                )
 
             """
         
@@ -39,6 +44,11 @@ class VenueSummary():
                     AND sv.VenueSummaryID IS NULL
                     AND YEAR(rev.ActualDate) = YEAR('{date_string}')
                     AND MONTH(rev.ActualDate) = MONTH('{date_string}')
+                    AND NOT EXISTS (
+                        SELECT * FROM Summary_Venue s_v
+                        WHERE v.VenueID = s_v.VenueID
+                          AND s_v.DateID = {date_int}
+                    )
             )
             SELECT r.VenueID,
                     ReviewText,
@@ -74,7 +84,8 @@ class VenueSummary():
 class OperatorSummary():
     def __init__(self):
         self.table = 'Operator'
-        self.idcol = 'OperatorID'
+        self.value_field = 'OperatorName'
+        self.primary_key = 'OperatorID'
         
     def get_count_remaining(self, conn, date_int, date_string):
         query = f"""
@@ -133,8 +144,9 @@ class OperatorSummary():
 class RegionSummary():
     def __init__(self):
         self.table = 'Region'
-        self.idcol = 'RegionID'
-        self.idcol2 = 'OperatorID'
+        self.value_field = 'Region'
+        self.primary_key = 'RegionID'
+        self.foreign_key = 'OperatorID'
 
     def get_count_remaining(self, conn, date_int, date_string):
         query = f"""
@@ -145,7 +157,7 @@ class RegionSummary():
                     inner join Brand b on b.BrandID = v.BrandID
                     inner join Operator o on o.OperatorID = b.OperatorID
                     inner join Postcode p on p.PostcodeID = v.PostcodeID
-                    inner join Region reg on reg.RegionID = p.RegionID and Region <> '-'
+                    inner join Region reg on reg.RegionID = p.RegionID
                     LEFT JOIN #SummaryRegion sr on sr.RegionID = reg.RegionID
                          and sr.OperatorID = o.OperatorID 
                          and sv.DateID = {date_int}
@@ -167,7 +179,7 @@ class RegionSummary():
                 inner join Brand b on b.BrandID = v.BrandID
                 inner join Operator o on o.OperatorID = b.OperatorID
                 inner join Postcode p on p.PostcodeID = v.PostcodeID
-                inner join Region reg on reg.RegionID = p.RegionID and Region <> '-'
+                inner join Region reg on reg.RegionID = p.RegionID
                 LEFT JOIN #SummaryRegion sr on sr.RegionID = reg.RegionID
                                           and sr.OperatorID = o.OperatorID
                                           and sv.DateID = {date_int}
@@ -259,6 +271,11 @@ def final_insert():
 
 def get_unique_ids(tbl, id_col_name):
     return int(tbl[id_col_name].unique()[0])
+
+
+def getid_fromvalue(obj, value, conn):
+    query = sa.text(f"select {obj.primary_key} from {obj.table} where {obj.value_field} = '{value}'")
+    return int(pd.read_sql(query, conn)[f'{obj.primary_key}'][0])
 
 
 JSON_FORMAT = {
