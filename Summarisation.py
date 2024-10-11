@@ -27,7 +27,7 @@ def process_summaries(obj, conn, date_int, date_string):
         
         remaining = obj.get_count_remaining(conn, date_int, date_string) - failed
       
-        if remaining == 0: 
+        if remaining == 0 : 
             print(f'All {obj.table}s Summarised For {YEAR_MONTH.title()}.')
             break
         
@@ -43,6 +43,7 @@ def process_summaries(obj, conn, date_int, date_string):
             # feed venue summaries and create operator summaries from them
             input_json = input_tbl["VenueSummary"].to_json(orient='records')
 
+
         FK_ID = None
         unknown_region = None
         if obj.__class__.__name__ == 'RegionSummary':
@@ -51,6 +52,8 @@ def process_summaries(obj, conn, date_int, date_string):
 
         PK_ID = summtools.get_unique_ids(input_tbl, obj.primary_key)
 
+
+        # if Region unknown, do not summarise by region.
         if PK_ID == unknown_region:
             output_table = pd.DataFrame({'Summary': ['-']})
         else:
@@ -93,19 +96,14 @@ def main():
         dateid_tbl = pd.read_sql(sa.text(dateid_intquery), conn)
         date_int = int(dateid_tbl['DateID'][0])
 
-        aitools.drop_tbl('#SummaryVenue')
-        aitools.create_temp_headers(conn, '#SummaryVenue', 'Summary_Venue')
-
-        aitools.drop_tbl('#SummaryOperator')
-        aitools.create_temp_headers(conn, '#SummaryOperator', 'Summary_Operator')
-
-        aitools.drop_tbl('#SummaryRegion')
-        aitools.create_temp_headers(conn, '#SummaryRegion', 'Summary_Region')
+        aitools.create_temp(conn, '#SummaryVenue', 'Summary_Venue')
+        aitools.create_temp(conn, '#SummaryOperator', 'Summary_Operator')
+        aitools.create_temp(conn, '#SummaryRegion', 'Summary_Region')
 
         process_summaries(summtools.VenueSummary(), conn, date_int, date_string)
         process_summaries(summtools.OperatorSummary(), conn, date_int, date_string)
         process_summaries(summtools.RegionSummary(), conn, date_int, date_string)
-        
+
         conn.execute(sa.text(summtools.final_insert()))
 
 if __name__ == '__main__':

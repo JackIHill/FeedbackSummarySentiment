@@ -46,8 +46,9 @@ def print_result(completed, remaining, failed, flush=True):
     print(f'Completed: {completed}. Remaining: {remaining}. Failed: {failed}', end='\r', flush=flush)
 
 
-def create_temp_headers(conn, temptblname, basetblname):
-    conn.execute(sa.text(f"""SELECT TOP(0) * INTO {temptblname} from {basetblname}"""))
+def create_temp(conn, temptblname, basetblname):
+    drop_tbl(temptblname)
+    conn.execute(sa.text(f"""SELECT * INTO {temptblname} from {basetblname}"""))
 
 
 def establish_connection(API_KEY, sql_user, sql_pass, sql_server, sql_db, sql_driver):
