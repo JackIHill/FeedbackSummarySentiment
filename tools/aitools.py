@@ -42,7 +42,8 @@ def process_completion(client, prompt, json_format):
 
     return output_table
 
-def print_result(completed, remaining, failed, flush=True):
+
+def print_result(completed, remaining, failed, flush):
     print(f'Completed: {completed}. Remaining: {remaining}. Failed: {failed}', end='\r', flush=flush)
 
 
@@ -54,7 +55,12 @@ def create_temp(conn, temptblname, basetblname):
 def establish_connection(API_KEY, sql_user, sql_pass, sql_server, sql_db, sql_driver):
     client = OpenAI(api_key=API_KEY)
     connection_url = f"mssql+pyodbc://{sql_user}:{sql_pass}@{sql_server}/{sql_db}?driver={sql_driver}"
-    engine = sa.create_engine(connection_url)
+    engine = sa.create_engine(
+        connection_url,
+        pool_size = 15,
+        max_overflow = 30,
+        pool_timeout=30,
+        pool_pre_ping=True)
     return client, engine
     
 

@@ -1,4 +1,4 @@
-import pandas as pd
+import threading
 import sqlalchemy as sa
 from credentials.SQL_Credentials import username, password, server, database, driver
 
@@ -7,105 +7,182 @@ from credentials.OpenAI_API_Key import API_KEY
 
 import tools.sentimenttools as senttools
 import tools.aitools as aitools
+from queue import Queue
 
-
-client, engine = aitools.establish_connection(API_KEY, username, password, server, database, driver)
+from concurrent import futures
+import os
+import time
 
 stops = aitools.get_stops()
 
-DEFAULT_NUM_ROWS = 10
-MIN_REVIEW_DATEID = 20230101
+DEFAULT_NUM_ROWS = 50
+MIN_REVIEW_DATEID = None
 
-completed = 0
-failed = 0
-offset = 0
-try_count = 1
-num_rows = DEFAULT_NUM_ROWS
-while True:
-    # Grab the first num_rows distinct ReviewTexts that don't have sentiment scores.
-    # This ensures identical ReviewTexts later get given the same sentiment score. 
-    review_temp_name = '#review_no_sentiment'
-    with engine.begin() as conn:
-        conn.execute(sa.text(aitools.drop_tbl(review_temp_name)))
-        conn.execute(sa.text(senttools.insert_reviews(review_temp_name, MIN_REVIEW_DATEID)))
+# Shared lock and offset for thread-safe increment
+update_lock = threading.Lock()
+offset_lock = threading.Lock()
 
-        reviews = senttools.get_remaining_sentiment_rows(review_temp_name, offset, num_rows, conn)
-        # this can be improved, currently queries the full Review table rather
-        # than a temp - do a running calc.
-        remaining = senttools.get_count_remaining(conn, MIN_REVIEW_DATEID)
+id_queue = Queue()
 
+global_offset = 0
+global_remaining = None
+global_completed = 0
+global_failed = 0
 
-    raw_reviews = reviews['ReviewText']
-    if remaining == 0:
-        print('Sentiment rating for all Reviews has been completed.')
-        break
+def update_global_counters(completed, failed, conn):
+    global global_completed, global_failed, global_remaining
+    with update_lock:
+        global_completed += completed
+        global_failed += failed
+        global_remaining = senttools.get_count_remaining(conn, MIN_REVIEW_DATEID)
+ 
+        flush = False if global_remaining <= DEFAULT_NUM_ROWS else True
+        aitools.print_result(global_completed, global_remaining, global_failed, flush)
 
 
-    # Reduces text length by approx 20% = 20% less token usage for minimal cost in accuracy.
-    reviews.ReviewText = reviews.ReviewText.apply(
-                                lambda x: ' '.join([word for word in x.split() if word not in (stops)])
-                                )
+# should probably use queue for this and fill with values from 1 to num_rows?
+def get_next_offset(increment_by=DEFAULT_NUM_ROWS):
+    global global_offset
+    with offset_lock:
+        current_offset = global_offset
+        global_offset += increment_by
+    return current_offset
 
-    # retain only alpha chars
-    reviews.ReviewText = reviews.ReviewText.str.replace('[^a-zA-Z ]', '', regex=True).str.strip()
 
-    # get first 20 words of each review to limit token usage.
-    # Generally enough words to get a good read on sentiment
-    # reviews.ReviewText = reviews.ReviewText.apply(lambda x: ' '.join(x.split()[:20]))
+# make decorator?
+def with_retry(conn, query, max_retries=3):
+    for attempt in range(1, max_retries + 1):
+        try:
+            result = conn.execute(sa.text(query))
+            return result
+        except sa.exc.OperationalError as e:
+            if attempt < max_retries:
+                time.sleep(1)
+            else:
+                raise
 
-    # Get average length of reviewtext after sanitisation
-    # print(reviews.ReviewText.apply(len).mean())
 
-    review_json = reviews.to_json(orient='records')
+ids = set()
+def analyse_sentiment():
+    global global_remaining
 
-    prompt = senttools.sentiment_prompt(review_json)
-    output_table = aitools.process_completion(client, prompt, senttools.JSON_FORMAT)
+    client, engine = aitools.establish_connection(API_KEY, username, password, server, database, driver)
 
-    # Sentiment 10 -> 1
-    # Sentiment 5 -> 0
-    # Sentiment 0 -> -1
-    # Previously Unknown Sentiment of -1 now = -1.2. Set to '-' in SQL.
-    output_table["Sentiment"] = (output_table["Sentiment"] - 5) / 5
-
-            
-    # check valid sentiment, no odd values.
-
-    inputIDs = reviews['ReviewID'].to_list()
-    outputIDs = output_table['ReviewID'].to_list()
-
-    output_sentiment = output_table['Sentiment'].to_list()
-    invalid_output_sentiment = [
-        x for x in set(output_sentiment) if not -1.2 <= x <= 1.0 or (x * 10) % 2 != 0
-        ]
-
-    sentiment_temp_name = '#temp'
-    if try_count != 3:
-        if inputIDs == outputIDs and not invalid_output_sentiment:
-            with engine.begin() as conn:
-                conn.execute(sa.text(aitools.drop_tbl(sentiment_temp_name)))
-                aitools.table_to_sqltbl(output_table, sentiment_temp_name, conn)
-
-                conn.execute(sa.text(senttools.update_review_tbl_query(sentiment_temp_name)))
-                completed_rows = senttools.count_completed(sentiment_temp_name, conn)
-
-                input_reviewtext = str(raw_reviews.to_list())[1:-1]
-                conn.execute(sa.text(senttools.delete_completed_from_temp(review_temp_name, input_reviewtext)))
-
-            completed += completed_rows
-        else:
-            try_count += 1
-            num_rows -= 10
-            continue
-
-    elif try_count == 3:
-        failed += num_rows
-        # skip the batch if failed 3x
-        offset += num_rows
-
+    completed = 0
+    failed = 0
     try_count = 1
     num_rows = DEFAULT_NUM_ROWS
 
-    flush = False if remaining <= num_rows else True
-    aitools.print_result(completed, remaining, failed, flush)   
-   
+    while True:
+        current_offset = get_next_offset()
 
+        try:
+            review_temp_name = '#review_no_sentiment'
+            with engine.begin() as conn:
+                # Drop and recreate the temporary table
+                with_retry(conn, aitools.drop_tbl(review_temp_name))
+                with_retry(conn, senttools.insert_reviews(review_temp_name, MIN_REVIEW_DATEID))
+                
+                if global_remaining is None:
+                    with update_lock:
+                        if global_remaining is None:
+                            global_remaining = senttools.get_count_remaining(conn, MIN_REVIEW_DATEID)
+
+                # Fetch rows for sentiment analysis
+                reviews = senttools.get_remaining_sentiment_rows(review_temp_name, current_offset, num_rows, conn)
+
+                if reviews.empty:
+                    print(f"No more reviews to process at offset {current_offset}")
+                    break
+
+                # raw_reviews = reviews['ReviewText']
+                
+                # remove stop words and non-alpha characters
+                reviews.ReviewText = reviews.ReviewText.apply(
+                            lambda x: ' '.join([word for word in x.split() if word not in (stops)])
+                ).str.replace('[^a-zA-Z ]', '', regex=True).str.strip()
+
+                review_json = reviews.to_json(orient='records')
+                prompt = senttools.sentiment_prompt(review_json)
+
+                output_table = aitools.process_completion(client, prompt, senttools.JSON_FORMAT)
+                
+                # Sentiment 10 -> 1
+                # Sentiment 5 -> 0
+                # Sentiment 0 -> -1
+                # Previously Unknown Sentiment of -1 now = -1.2. Set to '-' in SQL.
+                output_table["Sentiment"] = (output_table["Sentiment"] - 5) / 5
+                
+                inputIDs = reviews['ReviewID'].to_list()
+                outputIDs = output_table['ReviewID'].to_list()
+
+                # ensure that no two threaads have updated the same id more than once.
+                # this should never happen due to offset increment. 
+                duplicate_found = any(i in list(id_queue.queue) for i in inputIDs)
+                if duplicate_found:
+                    print('Duplicate IDs found!')
+                    quit()
+                # Add IDs to the queue
+                for i in inputIDs:
+                    id_queue.put(i)
+
+
+                output_sentiment = output_table['Sentiment'].to_list()
+                invalid_output_sentiment = [
+                    x for x in set(output_sentiment) if not -1.2 <= x <= 1.0 or (x * 10) % 2 != 0
+                    ]
+
+
+                sentiment_temp_name = '#temp'
+                scale_factor = 0.2
+                if try_count != 3:
+                    with update_lock:
+                        if inputIDs == outputIDs and not invalid_output_sentiment:
+                            conn.execute(sa.text(aitools.drop_tbl(sentiment_temp_name)))
+                            aitools.table_to_sqltbl(output_table, sentiment_temp_name, conn)
+
+                            conn.execute(sa.text(senttools.update_review_tbl_query(sentiment_temp_name)))
+                            completed_rows = senttools.count_completed(sentiment_temp_name, conn)
+                            
+                            # input_reviewtext = str(raw_reviews.to_list())[1:-1]
+                            # conn.execute(sa.text(senttools.delete_completed_from_temp(review_temp_name, input_reviewtext)))
+
+                            completed += completed_rows
+                        else:
+                            try_count += 1
+                            num_rows = max(1, int(num_rows * (1 - scale_factor)))
+                            continue
+
+                elif try_count == 3:
+                    failed += num_rows
+                    # skip the batch if failed 3x
+                    get_next_offset(num_rows)
+                    num_rows = DEFAULT_NUM_ROWS
+
+
+                update_global_counters(completed, failed, conn)
+                completed = 0
+                failed = 0
+                try_count = 1
+
+
+                print(f"Processed {len(reviews)} reviews starting from offset {current_offset}")
+
+        except Exception as e:
+            print(f"Failed to process reviews at offset {current_offset}: {str(e)}")
+            break
+
+def threaded():
+    """
+    Executes sentiment analysis across multiple threads.
+    """
+    # Define the number of threads to use
+    num_threads = os.cpu_count()
+
+    # Use ThreadPoolExecutor to execute analyse_sentiment in parallel
+    with futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+        # Launch multiple threads to process sentiment analysis
+        executor.map(lambda _: analyse_sentiment(), range(num_threads))
+
+# Run the threaded function
+threaded()
