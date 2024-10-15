@@ -1,22 +1,24 @@
-import threading
 import sqlalchemy as sa
-from credentials.SQL_Credentials import username, password, server, database, driver
+from sqlalchemy.engine.base import Connection
 
-from openai import OpenAI
+from credentials.SQL_Credentials import username, password, server, database, driver
 from credentials.OpenAI_API_Key import API_KEY
 
 import tools.sentimenttools as senttools
 import tools.aitools as aitools
-from queue import Queue
 
+import threading
+from queue import Queue
 from concurrent import futures
+
+from typing import Optional
 import os
 import time
 
 stops = aitools.get_stops()
 
-DEFAULT_NUM_ROWS = 50
-MIN_REVIEW_DATEID = None
+DEFAULT_NUM_ROWS: int = 50
+MIN_REVIEW_DATEID: Optional[int] = None
 
 # Shared lock and offset for thread-safe increment
 update_lock = threading.Lock()
@@ -24,24 +26,27 @@ offset_lock = threading.Lock()
 
 id_queue = Queue()
 
-global_offset = 0
-global_remaining = None
-global_completed = 0
-global_failed = 0
+global_offset: int = 0
+global_remaining: Optional[int] = None
+global_completed: int = 0
+global_failed: int = 0
 
-def update_global_counters(completed, failed, conn):
+client, engine = aitools.establish_connection(API_KEY, username, password, server, database, driver)
+
+
+def update_global_counters(completed: int, failed: int, conn: Connection):
     global global_completed, global_failed, global_remaining
     with update_lock:
         global_completed += completed
         global_failed += failed
         global_remaining = senttools.get_count_remaining(conn, MIN_REVIEW_DATEID)
  
-        flush = False if global_remaining <= DEFAULT_NUM_ROWS else True
-        aitools.print_result(global_completed, global_remaining, global_failed, flush)
+    flush = False if global_remaining <= DEFAULT_NUM_ROWS else True
+    aitools.print_result(global_completed, global_remaining, global_failed, flush)
 
 
 # should probably use queue for this and fill with values from 1 to num_rows?
-def get_next_offset(increment_by=DEFAULT_NUM_ROWS):
+def get_next_offset(increment_by: int = DEFAULT_NUM_ROWS) -> int:
     global global_offset
     with offset_lock:
         current_offset = global_offset
@@ -50,7 +55,7 @@ def get_next_offset(increment_by=DEFAULT_NUM_ROWS):
 
 
 # make decorator?
-def with_retry(conn, query, max_retries=3):
+def with_retry(conn: Connection, query: str, max_retries: int = 3):
     for attempt in range(1, max_retries + 1):
         try:
             result = conn.execute(sa.text(query))
@@ -62,7 +67,6 @@ def with_retry(conn, query, max_retries=3):
                 raise
 
 
-ids = set()
 def analyse_sentiment():
     global global_remaining
 
@@ -80,7 +84,7 @@ def analyse_sentiment():
             review_temp_name = '#review_no_sentiment'
             with engine.begin() as conn:
                 # Drop and recreate the temporary table
-                with_retry(conn, aitools.drop_tbl(review_temp_name))
+                with_retry(conn, aitools.drop_tbl_query(review_temp_name))
                 with_retry(conn, senttools.insert_reviews(review_temp_name, MIN_REVIEW_DATEID))
                 
                 if global_remaining is None:
@@ -97,6 +101,8 @@ def analyse_sentiment():
 
                 # raw_reviews = reviews['ReviewText']
                 
+                # move this processing (and insert_reviews())
+                # outside of loop to reduce db calls and processing time
                 # remove stop words and non-alpha characters
                 reviews.ReviewText = reviews.ReviewText.apply(
                             lambda x: ' '.join([word for word in x.split() if word not in (stops)])
@@ -138,7 +144,7 @@ def analyse_sentiment():
                 if try_count != 3:
                     with update_lock:
                         if inputIDs == outputIDs and not invalid_output_sentiment:
-                            conn.execute(sa.text(aitools.drop_tbl(sentiment_temp_name)))
+                            conn.execute(sa.text(aitools.drop_tbl_query(sentiment_temp_name)))
                             aitools.table_to_sqltbl(output_table, sentiment_temp_name, conn)
 
                             conn.execute(sa.text(senttools.update_review_tbl_query(sentiment_temp_name)))
@@ -165,9 +171,6 @@ def analyse_sentiment():
                 failed = 0
                 try_count = 1
 
-
-                print(f"Processed {len(reviews)} reviews starting from offset {current_offset}")
-
         except Exception as e:
             print(f"Failed to process reviews at offset {current_offset}: {str(e)}")
             break
@@ -181,7 +184,6 @@ def threaded():
 
     # Use ThreadPoolExecutor to execute analyse_sentiment in parallel
     with futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
-        # Launch multiple threads to process sentiment analysis
         executor.map(lambda _: analyse_sentiment(), range(num_threads))
 
 # Run the threaded function

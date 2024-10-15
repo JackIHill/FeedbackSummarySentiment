@@ -1,14 +1,18 @@
 import pandas as pd
 import sqlalchemy as sa
+from sqlalchemy.engine.base import Connection
 
-def min_date_query(min_review_dateid):
+from typing import Optional
+
+
+def min_date_query(min_review_dateid: Optional[int]) -> str:
     where = ''
     if min_review_dateid:
         where = f"""AND Review_DateID >= {min_review_dateid}"""
     return where 
 
 
-def operator_join_where(operator_list):
+def operator_join_where(operator_list: Optional[list]) -> tuple[str, str]:
     op_join = where_op = ''
     if operator_list:
         operators = str(set(operator_list))[1:-1]
@@ -19,7 +23,12 @@ def operator_join_where(operator_list):
     return op_join, where_op
 
 
-def insert_reviews(temptbl, min_review_dateid=None, operator_list=None, phrase=False): 
+def insert_reviews(
+        temptbl: str,
+        min_review_dateid: Optional[int] = None,
+        operator_list: Optional[list] = None,
+        phrase: bool = False) -> str: 
+    
     where = ''
     join = ''
     where_date = min_date_query(min_review_dateid)
@@ -50,7 +59,12 @@ def insert_reviews(temptbl, min_review_dateid=None, operator_list=None, phrase=F
     return query
 
 
-def get_remaining_sentiment_rows(from_tbl, offset, num_rows, conn):
+def get_remaining_sentiment_rows(
+        from_tbl: str,
+        offset: int,
+        num_rows: int,
+        conn: Connection) -> pd.DataFrame:
+    
     query = f"""
             SELECT ReviewID, ReviewText
             FROM {from_tbl}
@@ -59,12 +73,16 @@ def get_remaining_sentiment_rows(from_tbl, offset, num_rows, conn):
             OFFSET {offset} ROWS
             FETCH NEXT {num_rows} ROWS ONLY
             """
-    
     rows = pd.read_sql(sa.text(query), conn)
     return rows 
 
 
-def get_count_remaining(conn, min_review_dateid=None, operator_list=None, phrase=False):
+def get_count_remaining(
+    conn: Connection,
+    min_review_dateid: Optional[int] = None,
+    operator_list: Optional[list] = None,
+    phrase: bool = False) -> int:
+
     # when move to ORM, add **kwargs for where clause.
     where = ''
     join = ''
@@ -93,7 +111,8 @@ def get_count_remaining(conn, min_review_dateid=None, operator_list=None, phrase
     count = int(pd.read_sql(sa.text(query), conn).to_string(index=False).strip())
     return count
 
-def sentiment_prompt(json):
+
+def sentiment_prompt(json: str) -> str:
     prompt = f"""
             The following JSON contains restaurant reviews (ReviewText).
             Each review is a separate entry. Stopwords have been filtered out of the ReviewText.
@@ -109,7 +128,7 @@ def sentiment_prompt(json):
     return prompt
 
 
-def phrase_prompt(json, phrase):
+def phrase_prompt(json, phrase: str) -> str:
     prompt = f"""
             The following JSON contains restaurant reviews (ReviewText).
             Each review is a separate entry.
@@ -135,7 +154,7 @@ def phrase_prompt(json, phrase):
     return prompt
 
 
-def update_review_tbl_query(temp_name):
+def update_review_tbl_query(temp_name: str) -> str:
     query = f"""
             WITH cte as (
                 SELECT
@@ -158,7 +177,7 @@ def update_review_tbl_query(temp_name):
     return query
 
 
-def update_phrase_tbl_query(phrase):
+def update_phrase_tbl_query(phrase: str) -> str:
     query = f"""
             WITH cte AS (
                 SELECT
@@ -211,7 +230,7 @@ def update_phrase_tbl_query(phrase):
     return query
 
 
-def count_completed(temp_name, conn):
+def count_completed(temp_name: str, conn: Connection) -> int:
     query = f"""
                 WITH cte as (
                     SELECT
@@ -230,7 +249,7 @@ def count_completed(temp_name, conn):
     return count
 
 
-def delete_completed_from_temp(temp_name, delete_list):
+def delete_completed_from_temp(temp_name: str, delete_list: str) -> str:
     query = f"""
             DELETE FROM {temp_name}
             WHERE ReviewText in ({delete_list})

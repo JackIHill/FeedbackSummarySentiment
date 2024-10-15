@@ -1,12 +1,20 @@
 import pandas as pd
 import sqlalchemy as sa
+from sqlalchemy.engine.base import Connection
+
+from typing import Optional
 
 class VenueSummary():
     def __init__(self):
         self.table = 'Venue'
         self.primary_key = 'VenueID'
         
-    def get_count_remaining(self, conn, date_int, date_string=None):
+    def get_count_remaining(
+        self,
+        conn: Connection,
+        date_int: int,
+        date_string: Optional[str] = None) -> int:
+
         query =  f"""
             SELECT count(distinct(r.VenueID))
             FROM Review r
@@ -32,7 +40,14 @@ class VenueSummary():
         count = int(pd.read_sql(sa.text(query), conn).to_string(index=False).strip())
         return count
 
-    def get_remaining_rows(self, conn, date_int, date_string=None, offset=None):
+    def get_remaining_rows(
+        self,
+        conn: Connection,
+        offset: Optional[int],
+        date_int: int,
+        date_string: Optional[str] = None
+        ) -> pd.DataFrame:
+
         query =  f"""
             WITH cte as (
                 SELECT DISTINCT v.VenueID, ReviewID
@@ -66,7 +81,12 @@ class VenueSummary():
 
         return rows
 
-    def temp_insert(self, date_string, venueid, id2=None):
+    def temp_insert(
+        self,
+        date_string: str,
+        venueid: int,
+        id2: Optional[int] = None) -> str:
+
         query = f"""
                 INSERT INTO #SummaryVenue (VenueSummary, DateID, VenueID, RegionSummaryID, OperatorSummaryID)
                 SELECT t.Summary, d.DateID, {venueid}, 0, 0
@@ -87,7 +107,12 @@ class OperatorSummary():
         self.value_field = 'OperatorName'
         self.primary_key = 'OperatorID'
         
-    def get_count_remaining(self, conn, date_int, date_string):
+    def get_count_remaining(
+        self,
+        conn: Connection,
+        date_int: int,
+        date_string: Optional[str] = None) -> int:
+
         query = f"""
             SELECT count(distinct(rem_op.OperatorID)) from (
                     select VenueSummary, o.OperatorID, sv.DateID
@@ -104,7 +129,14 @@ class OperatorSummary():
         return count
 
 
-    def get_remaining_rows(self, conn, date_int, date_string, offset):
+    def get_remaining_rows(
+        self,
+        conn: Connection,
+        offset: int,
+        date_int: int,
+        date_string: Optional[str] = None
+        ) -> pd.DataFrame:
+
         query = f"""
             WITH cte as (
                 select VenueSummary, o.OperatorID, sv.DateID
@@ -126,7 +158,12 @@ class OperatorSummary():
         return rows
 
 
-    def temp_insert(self, date_string, operatorid, id2=None):
+    def temp_insert(
+        self,
+        date_string: str,
+        operatorid: int,
+        id2: Optional[int] = None) -> str:
+
         query = f"""
                 INSERT INTO #SummaryOperator (OperatorSummary, DateID, OperatorID)
                 SELECT t.Summary, d.DateID, {operatorid}
@@ -148,7 +185,12 @@ class RegionSummary():
         self.primary_key = 'RegionID'
         self.foreign_key = 'OperatorID'
 
-    def get_count_remaining(self, conn, date_int, date_string):
+    def get_count_remaining(
+        self,
+        conn: Connection,
+        date_int: int,
+        date_string: Optional[str] = None) -> int:
+
         query = f"""
             WITH cte AS (
             select distinct operatorid, regionid from (
@@ -171,7 +213,14 @@ class RegionSummary():
         return count
 
 
-    def get_remaining_rows(self, conn, date_int, date_string, offset):
+    def get_remaining_rows(
+        self,
+        conn: Connection,
+        offset: int,
+        date_int: int,
+        date_string: Optional[str] = None,
+        ) -> pd.DataFrame:
+
         query = f"""
             WITH cte as (
                 select v.VenueID, VenueSummary, o.OperatorID, sv.DateID, reg.RegionID from #SummaryVenue sv
@@ -200,7 +249,12 @@ class RegionSummary():
         return rows
 
 
-    def temp_insert(self, date_string, regionid, operatorid):
+    def temp_insert(
+        self,
+        date_string: str,
+        regionid: int,
+        operatorid: int) -> str:
+
         query = f"""
             INSERT INTO #SummaryRegion (RegionSummary, DateID, RegionID, OperatorID)
             SELECT t.Summary, d.DateID, {regionid}, {operatorid}
@@ -216,7 +270,7 @@ class RegionSummary():
         return query
 
 
-def summary_prompt(json, category):
+def summary_prompt(json, category: str) -> str:
     prompt = f"""
         The following JSON contains restaurant reviews (ReviewText) for a {category}.
         Each review is a separate entry.
@@ -230,7 +284,7 @@ def summary_prompt(json, category):
     return prompt
 
 
-def final_insert():
+def final_insert() -> str:
     query = """
             INSERT INTO Summary_Operator (OperatorSummary, DateID, OperatorID)
             SELECT OperatorSummary, DateID, OperatorID
@@ -269,11 +323,11 @@ def final_insert():
     return query
 
 
-def get_unique_ids(tbl, id_col_name):
+def get_unique_ids(tbl: pd.DataFrame, id_col_name: str) -> int:
     return int(tbl[id_col_name].unique()[0])
 
 
-def getid_fromvalue(obj, value, conn):
+def getid_fromvalue(obj, value: str, conn: Connection) -> int:
     query = sa.text(f"select {obj.primary_key} from {obj.table} where {obj.value_field} = '{value}'")
     return int(pd.read_sql(query, conn)[f'{obj.primary_key}'][0])
 

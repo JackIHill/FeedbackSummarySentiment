@@ -1,24 +1,29 @@
 import os
 import json
 import pandas as pd
+from typing import Optional
+
 import sqlalchemy as sa
+from sqlalchemy.engine.base import Connection, Engine
+
 from openai import OpenAI
+
 from nltk import download
 from nltk.corpus import stopwords
 
 
-def drop_tbl(tbl_name):
+def drop_tbl_query(tbl_name: str) -> str:
     query = f"""
         DROP TABLE IF EXISTS {tbl_name}
         """
     return query
 
 
-def table_to_sqltbl(base_tbl, sql_tbl_name, conn):
+def table_to_sqltbl(base_tbl: pd.DataFrame, sql_tbl_name: str, conn: Connection):
     base_tbl.to_sql(f'{sql_tbl_name}', conn, if_exists="replace", index=False, schema='online')
 
 
-def process_completion(client, prompt, json_format):
+def process_completion(client: OpenAI, prompt: str, json_format) -> pd.DataFrame:
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -31,10 +36,14 @@ def process_completion(client, prompt, json_format):
 
     try:
         event = fr"""{completion.choices[0].message.content}"""
-    except json.decoder.JSONDecodeError:
-        print(f'API call failure: Prompt: {prompt} \n Completion: {completion}')
-        return None
-    
+    except json.decoder.JSONDecodeError as e:
+        errmsg = f"""
+            JSON decode failure: Prompt: {prompt}
+            Completion: {completion}. 
+            """
+        e.add_note(errmsg)
+        raise 
+        
     json_name = list(json.loads(event).keys())[0]
 
     output_json = json.loads(event)[f'{json_name}']
@@ -43,16 +52,27 @@ def process_completion(client, prompt, json_format):
     return output_table
 
 
-def print_result(completed, remaining, failed, flush):
-    print(f'Completed: {completed}. Remaining: {remaining}. Failed: {failed}', end='\r', flush=flush)
+def print_result(completed: int, remaining: int, failed: int, flush: bool):
+    print(f'Completed: {completed}. Remaining: {remaining}. Failed: {failed}',
+           end='\r',
+           flush=flush
+        )
 
 
-def create_temp(conn, temptblname, basetblname):
-    drop_tbl(temptblname)
+def create_temp(conn: Connection, temptblname: str, basetblname: str):
+    drop_tbl_query(temptblname)
     conn.execute(sa.text(f"""SELECT * INTO {temptblname} from {basetblname}"""))
 
 
-def establish_connection(API_KEY, sql_user, sql_pass, sql_server, sql_db, sql_driver):
+def establish_connection(
+        API_KEY: str,
+        sql_user: str,
+        sql_pass: str,
+        sql_server: str,
+        sql_db: str,
+        sql_driver: str
+        ) -> tuple[OpenAI, Engine]:
+    
     client = OpenAI(api_key=API_KEY)
     connection_url = f"mssql+pyodbc://{sql_user}:{sql_pass}@{sql_server}/{sql_db}?driver={sql_driver}"
     engine = sa.create_engine(
@@ -61,10 +81,11 @@ def establish_connection(API_KEY, sql_user, sql_pass, sql_server, sql_db, sql_dr
         max_overflow = 30,
         pool_timeout=30,
         pool_pre_ping=True)
+    
     return client, engine
     
 
-def get_stops():
+def get_stops() -> list:
     download('stopwords')
 
     __location__ = os.path.realpath(

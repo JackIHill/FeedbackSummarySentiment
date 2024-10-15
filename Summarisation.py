@@ -2,6 +2,8 @@
 import pandas as pd
 
 import sqlalchemy as sa
+from sqlalchemy.engine.base import Connection
+
 from credentials.SQL_Credentials import username, password, server, database, driver
 
 from openai import OpenAI
@@ -12,13 +14,13 @@ import tools.aitools as aitools
 
 client, engine = aitools.establish_connection(API_KEY, username, password, server, database, driver)
 
-YEAR_MONTH = 'SEP-24'
+YEAR_MONTH: str = 'SEP-24'
 
 MMM_YYtoDate = f"""
             SELECT ActualDate FROM Dates WHERE ActualDate = CONVERT(DATE, CONCAT('01-', '{YEAR_MONTH}'))
             """
 
-def process_summaries(obj, conn, date_int, date_string):
+def process_summaries(obj, conn: Connection, date_int: int, date_string: str):
     completed = 0
     failed = 0
     offset = 0
@@ -32,7 +34,7 @@ def process_summaries(obj, conn, date_int, date_string):
             break
         
         # Grab all non-null ReviewText reviews for a venue. 
-        input_tbl = obj.get_remaining_rows(conn, date_int, date_string, offset)
+        input_tbl = obj.get_remaining_rows(conn, offset, date_int, date_string)
 
         if obj.__class__.__name__ == 'VenueSummary': 
             # retain only alpha chars
@@ -67,7 +69,7 @@ def process_summaries(obj, conn, date_int, date_string):
 
         if try_count != 3:
             if summary_wordlen <= 50:
-                conn.execute(sa.text(aitools.drop_tbl('#temp')))
+                conn.execute(sa.text(aitools.drop_tbl_query('#temp')))
                 aitools.table_to_sqltbl(base_tbl=output_table, sql_tbl_name='#temp', conn=conn)
 
                 conn.execute(sa.text(obj.temp_insert(date_string, PK_ID, FK_ID)))
