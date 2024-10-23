@@ -1,5 +1,6 @@
 import sqlalchemy as sa
-from sqlalchemy.engine.base import Connection
+from sqlalchemy.engine.base import Connection # for type hints
+import pyodbc
 
 from credentials.SQL_Credentials import username, password, server, database, driver
 from credentials.OpenAI_API_Key import API_KEY
@@ -60,7 +61,7 @@ def with_retry(conn: Connection, query: str, max_retries: int = 3):
         try:
             result = conn.execute(sa.text(query))
             return result
-        except sa.exc.OperationalError as e:
+        except (sa.exc.OperationalError, pyodbc.Error) as e:
             if attempt < max_retries:
                 time.sleep(1)
             else:
@@ -80,100 +81,97 @@ def analyse_sentiment():
     while True:
         current_offset = get_next_offset()
 
-        try:
-            review_temp_name = '#review_no_sentiment'
-            with engine.begin() as conn:
-                # Drop and recreate the temporary table
-                with_retry(conn, aitools.drop_tbl_query(review_temp_name))
-                with_retry(conn, senttools.insert_reviews(review_temp_name, MIN_REVIEW_DATEID))
-                
-                if global_remaining is None:
-                    with update_lock:
-                        if global_remaining is None:
-                            global_remaining = senttools.get_count_remaining(conn, MIN_REVIEW_DATEID)
+        review_temp_name = '#review_no_sentiment'
+        with engine.begin() as conn:
+            # Drop and recreate the temporary table
+            with_retry(conn, aitools.drop_tbl_query(review_temp_name))
+            with_retry(conn, senttools.insert_reviews(review_temp_name, MIN_REVIEW_DATEID))
+            
+            if global_remaining is None:
+                with update_lock:
+                    if global_remaining is None:
+                        global_remaining = senttools.get_count_remaining(conn, MIN_REVIEW_DATEID)
 
-                # Fetch rows for sentiment analysis
-                reviews = senttools.get_remaining_sentiment_rows(review_temp_name, current_offset, num_rows, conn)
+            # Fetch rows for sentiment analysis
+            reviews = senttools.get_remaining_sentiment_rows(review_temp_name, current_offset, num_rows, conn)
 
-                if reviews.empty:
-                    print(f"No more reviews to process at offset {current_offset}")
-                    break
+            if reviews.empty:
+                print(f"No more reviews to process at offset {current_offset}")
+                break
 
-                # raw_reviews = reviews['ReviewText']
-                
-                # move this processing (and insert_reviews())
-                # outside of loop to reduce db calls and processing time
-                # remove stop words and non-alpha characters
-                reviews.ReviewText = reviews.ReviewText.apply(
-                            lambda x: ' '.join([word for word in x.split() if word not in (stops)])
-                ).str.replace('[^a-zA-Z ]', '', regex=True).str.strip()
+            # raw_reviews = reviews['ReviewText']
+            
+            # move this processing (and insert_reviews())
+            # outside of loop to reduce db calls and processing time
+            # remove stop words and non-alpha characters
+            reviews.ReviewText = reviews.ReviewText.apply(
+                        lambda x: ' '.join([word for word in x.split() if word not in (stops)])
+            ).str.replace('[^a-zA-Z ]', '', regex=True).str.strip()
 
-                review_json = reviews.to_json(orient='records')
-                prompt = senttools.sentiment_prompt(review_json)
+            review_json = reviews.to_json(orient='records')
+            prompt = senttools.sentiment_prompt(review_json)
 
-                output_table = aitools.process_completion(client, prompt, senttools.JSON_FORMAT)
-                
-                # Sentiment 10 -> 1
-                # Sentiment 5 -> 0
-                # Sentiment 0 -> -1
-                # Previously Unknown Sentiment of -1 now = -1.2. Set to '-' in SQL.
-                output_table["Sentiment"] = (output_table["Sentiment"] - 5) / 5
-                
-                inputIDs = reviews['ReviewID'].to_list()
-                outputIDs = output_table['ReviewID'].to_list()
+            output_table = aitools.process_completion(client, prompt, senttools.JSON_FORMAT)
+            
+            # Sentiment 10 -> 1
+            # Sentiment 5 -> 0
+            # Sentiment 0 -> -1
+            # Previously Unknown Sentiment of -1 now = -1.2. Set to '-' in SQL.
+            output_table["Sentiment"] = (output_table["Sentiment"] - 5) / 5
+            
+            inputIDs = reviews['ReviewID'].to_list()
+            outputIDs = output_table['ReviewID'].to_list()
 
-                # ensure that no two threaads have updated the same id more than once.
-                # this should never happen due to offset increment. 
-                duplicate_found = any(i in list(id_queue.queue) for i in inputIDs)
-                if duplicate_found:
-                    print('Duplicate IDs found!')
-                    quit()
-                # Add IDs to the queue
-                for i in inputIDs:
-                    id_queue.put(i)
-
-
-                output_sentiment = output_table['Sentiment'].to_list()
-                invalid_output_sentiment = [
-                    x for x in set(output_sentiment) if not -1.2 <= x <= 1.0 or (x * 10) % 2 != 0
-                    ]
+            # ensure that no two threaads have updated the same id more than once.
+            # this should never happen due to offset increment. 
+            duplicate_found = any(i in list(id_queue.queue) for i in inputIDs)
+            if duplicate_found:
+                # skip batch or retry instead...
+                print('Duplicate IDs found!')
+                quit()
+            # Add IDs to the queue
+            for i in inputIDs:
+                id_queue.put(i)
 
 
-                sentiment_temp_name = '#temp'
-                scale_factor = 0.2
-                if try_count != 3:
-                    with update_lock:
-                        if inputIDs == outputIDs and not invalid_output_sentiment:
-                            conn.execute(sa.text(aitools.drop_tbl_query(sentiment_temp_name)))
-                            aitools.table_to_sqltbl(output_table, sentiment_temp_name, conn)
-
-                            conn.execute(sa.text(senttools.update_review_tbl_query(sentiment_temp_name)))
-                            completed_rows = senttools.count_completed(sentiment_temp_name, conn)
-                            
-                            # input_reviewtext = str(raw_reviews.to_list())[1:-1]
-                            # conn.execute(sa.text(senttools.delete_completed_from_temp(review_temp_name, input_reviewtext)))
-
-                            completed += completed_rows
-                        else:
-                            try_count += 1
-                            num_rows = max(1, int(num_rows * (1 - scale_factor)))
-                            continue
-
-                elif try_count == 3:
-                    failed += num_rows
-                    # skip the batch if failed 3x
-                    get_next_offset(num_rows)
-                    num_rows = DEFAULT_NUM_ROWS
+            output_sentiment = output_table['Sentiment'].to_list()
+            invalid_output_sentiment = [
+                x for x in set(output_sentiment) if not -1.2 <= x <= 1.0 or (x * 10) % 2 != 0
+                ]
 
 
-                update_global_counters(completed, failed, conn)
-                completed = 0
-                failed = 0
-                try_count = 1
+            sentiment_temp_name = '#temp'
+            scale_factor = 0.2
+            if try_count != 3:
+                with update_lock:
+                    if inputIDs == outputIDs and not invalid_output_sentiment:
+                        conn.execute(sa.text(aitools.drop_tbl_query(sentiment_temp_name)))
+                        aitools.table_to_sqltbl(output_table, sentiment_temp_name, conn)
 
-        except Exception as e:
-            print(f"Failed to process reviews at offset {current_offset}: {str(e)}")
-            break
+                        conn.execute(sa.text(senttools.update_review_tbl_query(sentiment_temp_name)))
+                        completed_rows = senttools.count_completed(sentiment_temp_name, conn)
+                        
+                        # input_reviewtext = str(raw_reviews.to_list())[1:-1]
+                        # conn.execute(sa.text(senttools.delete_completed_from_temp(review_temp_name, input_reviewtext)))
+
+                        completed += completed_rows
+                    else:
+                        try_count += 1
+                        num_rows = max(1, int(num_rows * (1 - scale_factor)))
+                        continue
+
+            elif try_count == 3:
+                failed += num_rows
+                # skip the batch if failed 3x
+                get_next_offset(num_rows)
+                num_rows = DEFAULT_NUM_ROWS
+
+
+            update_global_counters(completed, failed, conn)
+            completed = 0
+            failed = 0
+            try_count = 1
+
 
 def threaded():
     """
@@ -186,5 +184,5 @@ def threaded():
     with futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
         executor.map(lambda _: analyse_sentiment(), range(num_threads))
 
-# Run the threaded function
-threaded()
+if __name__ == '__main__':
+    threaded()
