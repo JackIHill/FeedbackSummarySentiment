@@ -117,7 +117,7 @@ def sentiment_prompt(json: str, input_length: int) -> str:
             You will analyze restaurant reviews and return a sentiment score for each review.
             The input is a JSON list of reviews, each with a 'ReviewID' and 'ReviewText'.
             The sentiment should be rated from 0 to 10:
-            - '0' indicates highly negative.
+            - '0' is highly negative.
             - '5' is neutral.
             - '10' is highly positive.
             - If the sentiment is unknown or unclear, return '-1'.

@@ -20,9 +20,16 @@ def drop_tbl_query(tbl_name: str) -> str:
     return query
 
 
-def table_to_sqltbl(base_tbl: pd.DataFrame, sql_tbl_name: str, conn: Connection):
+def table_to_sqltbl(
+        base_tbl: pd.DataFrame,
+        sql_tbl_name: str,
+        idx_col_name: str,
+        conn: Connection):
+    
     base_tbl.to_sql(f'{sql_tbl_name}', conn, if_exists="replace", index=False, schema='online')
-
+    conn.execute(
+        sa.text(f"""CREATE INDEX idx ON {sql_tbl_name} ({idx_col_name})"""))
+    
 
 def process_completion(client: OpenAI, prompt: str, json_format) -> pd.DataFrame:
     completion = client.chat.completions.create(
@@ -71,7 +78,7 @@ def print_result(num_rows: int, completed: int, remaining: int, failed: int, end
         )
 
 
-def print_failed_reviews(current_offset: int, error: Optional[str] = None):
+def print_failed_review_err(current_offset: int, error: Optional[str] = None):
     output = f"\nFailed to process reviews at offset {current_offset}"
     if error:
         output += f': {error}'
@@ -90,14 +97,15 @@ def establish_connection(
         sql_pass: str,
         sql_server: str,
         sql_db: str,
-        sql_driver: str
+        sql_driver: str,
+        num_workers: int
         ) -> tuple[OpenAI, Engine]:
     
     client = OpenAI(api_key=API_KEY)
     connection_url = f"mssql+pyodbc://{sql_user}:{sql_pass}@{sql_server}/{sql_db}?driver={sql_driver}"
     engine = sa.create_engine(
         connection_url,
-        pool_size = 15,
+        pool_size = num_workers * 2,
         max_overflow = 30,
         pool_timeout=30,
         pool_pre_ping=True)
