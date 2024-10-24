@@ -112,17 +112,22 @@ def get_count_remaining(
     return count
 
 
-def sentiment_prompt(json: str) -> str:
+def sentiment_prompt(json: str, input_length: int) -> str:
     prompt = f"""
-            The following JSON contains restaurant reviews (ReviewText).
-            Each review is a separate entry. Stopwords have been filtered out of the ReviewText.
-            Rate the sentiment of each review from 0 to 10
-            0 indicates highly negative sentiment, 5 is neutral sentiment, and 10 is highly positive.
-            If sentiment unknown, return -1
+            You will analyze restaurant reviews and return a sentiment score for each review.
+            The input is a JSON list of reviews, each with a 'ReviewID' and 'ReviewText'.
+            The sentiment should be rated from 0 to 10:
+            - '0' indicates highly negative.
+            - '5' is neutral.
+            - '10' is highly positive.
+            - If the sentiment is unknown or unclear, return '-1'.
 
-            Return the ReviewID for the corresponding ReviewText and its sentiment rating.
-            Ensure the returned ReviewID is in the input list of ReviewID and all input ReviewIDs are returned.
-
+            Requirements:
+            1. Each review must have a 'ReviewID' in the output, exactly as it appears in the input.
+            2. No 'ReviewID' should be skipped, even if the sentiment is unknown (use '-1' if unsure).
+            3. The output must be a JSON list where each item contains a 'ReviewID' and its corresponding 'Sentiment'.
+            4. There should be no more than {input_length} 'ReviewID's in the output.    
+                                                                
             Here are the reviews: \n\n{json}
             """
     return prompt
@@ -166,7 +171,7 @@ def update_review_tbl_query(temp_name: str) -> str:
                 FROM {temp_name} t
                 INNER JOIN Review r ON r.ReviewID = t.ReviewID
                 )
-            UPDATE Review 
+            UPDATE Review
             set ReviewSentimentID = s.SentimentID
             FROM Review r
             INNER JOIN cte on cte.ReviewText = r.ReviewText

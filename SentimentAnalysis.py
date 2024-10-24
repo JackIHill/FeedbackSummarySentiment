@@ -18,14 +18,14 @@ import time
 
 stops = aitools.get_stops()
 
-DEFAULT_NUM_ROWS: int = 50
+DEFAULT_NUM_ROWS: int = 200
 MIN_REVIEW_DATEID: Optional[int] = None
 
 # Shared lock and offset for thread-safe increment
 update_lock = threading.Lock()
 offset_lock = threading.Lock()
 print_lock = threading.Lock()
-read_barrier = threading.Barrier(os.cpu_count())
+read_barrier = threading.Barrier(os.cpu_count() * 4)
 
 id_queue = Queue()
 
@@ -111,7 +111,7 @@ def analyse_sentiment():
             
             read_barrier.wait()
             
-            print('Reviews obtained for all threads. Processing...', end='\r')
+            print('Reviews fetched for all threads. Processing...', end='\r')
 
 
         while True:
@@ -141,7 +141,7 @@ def analyse_sentiment():
                     ).str.replace('[^a-zA-Z ]', '', regex=True).str.strip()
 
                     review_json = reviews.to_json(orient='records')
-                    prompt = senttools.sentiment_prompt(review_json)
+                    prompt = senttools.sentiment_prompt(review_json, num_rows)
 
                     output_table = aitools.process_completion(client, prompt, senttools.JSON_FORMAT)
 
@@ -153,6 +153,7 @@ def analyse_sentiment():
                     
                     inputIDs = reviews['ReviewID'].to_list()
                     outputIDs = output_table['ReviewID'].to_list()
+                    # print(output_table['Sentiment'].to_list())
 
                     # ensure that no two threaads have updated the same id more than once.
                     # this should never happen due to offset increment. 
@@ -175,7 +176,6 @@ def analyse_sentiment():
                     scale_factor = 0.2
                     if try_count != 3:
                         with update_lock:
-
                             if inputIDs == outputIDs and not invalid_output_sentiment:
                                 conn.execute(sa.text(aitools.drop_tbl_query(sentiment_temp_name)))
                                 aitools.table_to_sqltbl(output_table, sentiment_temp_name, conn)
@@ -219,7 +219,7 @@ def threaded():
     """
     # Define the number of threads to use
     # max workers defaults to processors * 5 - test no max_workers value
-    num_threads = os.cpu_count()
+    num_threads = os.cpu_count() * 4
 
     # Use ThreadPoolExecutor to execute analyse_sentiment in parallel
     with futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
