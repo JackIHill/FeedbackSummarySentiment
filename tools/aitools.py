@@ -53,15 +53,30 @@ def process_completion(client: OpenAI, prompt: str, json_format) -> pd.DataFrame
     return output_table
 
 
-def print_thread_count():
-    print(f'Active Threads: {threading.active_count()}', end='\r', flush=True)
+def print_thread_count(end: str = '\r'):
+    print(f'Active Threads: {threading.active_count()}', end=end, flush=True)
 
 
-def print_result(completed: int, remaining: int, failed: int, flush: bool):
-    print(f'Completed: {completed}. Remaining: {remaining}. Failed: {failed}',
-           end='\r',
+def move_cursor_up():
+    print('\033[F', end='', flush=True)
+
+
+def print_result(num_rows: int, completed: int, remaining: int, failed: int, end: str = '\r', flush: bool = True):
+    if remaining <= num_rows:
+        end = '' 
+
+    print(f'Completed: {completed}. Remaining: {remaining}. Failed: {failed:<50}',
+           end=end,
            flush=flush
         )
+
+
+def print_failed_reviews(current_offset: int, error: Optional[str] = None):
+    output = f"\nFailed to process reviews at offset {current_offset}"
+    if error:
+        output += f': {error}'
+
+    print(output)
 
 
 def create_temp(conn: Connection, temptblname: str, basetblname: str):

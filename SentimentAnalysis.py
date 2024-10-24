@@ -19,11 +19,12 @@ import time
 stops = aitools.get_stops()
 
 DEFAULT_NUM_ROWS: int = 50
-MIN_REVIEW_DATEID: Optional[int] = 20240601
+MIN_REVIEW_DATEID: Optional[int] = None
 
 # Shared lock and offset for thread-safe increment
 update_lock = threading.Lock()
 offset_lock = threading.Lock()
+print_lock = threading.Lock()
 read_barrier = threading.Barrier(os.cpu_count())
 
 id_queue = Queue()
@@ -32,6 +33,7 @@ global_offset: int = 0
 global_remaining: Optional[int] = None
 global_completed: int = 0
 global_failed: int = 0
+global_printed: bool = False
 
 client, engine = aitools.establish_connection(API_KEY, username, password, server, database, driver)
 
@@ -48,10 +50,8 @@ def update_global_counters(
         global_failed += failed
         global_remaining = senttools.get_count_remaining(conn, MIN_REVIEW_DATEID)
  
-    flush = False if global_remaining <= DEFAULT_NUM_ROWS else True
-
     if print_status:
-        aitools.print_result(global_completed, global_remaining, global_failed, flush=False)
+        aitools.print_result(DEFAULT_NUM_ROWS, global_completed, global_remaining, global_failed)
 
 
 # should probably use queue for this and fill with values from 1 to num_rows?
@@ -75,10 +75,17 @@ def with_retry(conn: Connection, query: str, max_retries: int = 3):
             else:
                 raise e
 
+# with print_lock:
+#     if not global_printed:
+#         print()
+#         global_printed = True
+                    
+
 
 def analyse_sentiment():
     aitools.print_thread_count()
 
+    global global_printed
     global global_remaining
 
     client, engine = aitools.establish_connection(API_KEY, username, password, server, database, driver)
@@ -92,10 +99,20 @@ def analyse_sentiment():
     with engine.connect() as conn:
         with conn.begin():
         # Drop and recreate the temporary table
+        
+            with print_lock:
+                if not global_printed:
+                    print(f'\nFetching Reviews...\r')
+                    global_printed = True
+                    aitools.move_cursor_up()
+
             with_retry(conn, aitools.drop_tbl_query(review_temp_name))
             with_retry(conn, senttools.insert_reviews(review_temp_name, MIN_REVIEW_DATEID))
             
             read_barrier.wait()
+            
+            print('Reviews obtained for all threads. Processing...', end='\r')
+
 
         while True:
             current_offset = get_next_offset()
@@ -178,6 +195,8 @@ def analyse_sentiment():
 
                     elif try_count == 3:
                         failed += num_rows
+                        aitools.print_failed_reviews(current_offset)
+
                         # skip the batch if failed 3x
                         get_next_offset(num_rows)
                         num_rows = DEFAULT_NUM_ROWS
@@ -187,9 +206,10 @@ def analyse_sentiment():
                     completed = 0
                     failed = 0
                     try_count = 1
-
+                
             except Exception as e:
-                print(f"Failed to process reviews at offset {current_offset}: {str(e)}")
+                aitools.print_failed_reviews(current_offset, error=e)
+                aitools.print_thread_count(end='\n')
                 break
 
 
