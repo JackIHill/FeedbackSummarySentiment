@@ -7,6 +7,7 @@ import sqlalchemy as sa
 from sqlalchemy.engine.base import Connection, Engine
 
 from openai import OpenAI
+import threading
 
 from nltk import download
 from nltk.corpus import stopwords
@@ -50,6 +51,10 @@ def process_completion(client: OpenAI, prompt: str, json_format) -> pd.DataFrame
     output_table = pd.DataFrame(pd.json_normalize(output_json))
 
     return output_table
+
+
+def print_thread_count():
+    print(f'Active Threads: {threading.active_count()}', end='\r', flush=True)
 
 
 def print_result(completed: int, remaining: int, failed: int, flush: bool):
