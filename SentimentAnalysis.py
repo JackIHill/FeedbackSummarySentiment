@@ -28,7 +28,8 @@ update_lock = threading.Lock()
 offset_lock = threading.Lock()
 print_lock = threading.Lock()
 
-id_queue = Queue()
+from collections import deque
+id_queue = deque()
 
 global_offset: int = 0
 global_remaining: Optional[int] = None
@@ -75,6 +76,36 @@ def with_retry(conn: Connection, query: str, max_retries: int = 3):
                 raise e
 
 
+num_workers = 13
+client, engine = aitools.establish_connection(
+    API_KEY,
+    username,
+    password,
+    server,
+    database,
+    driver,
+    num_workers
+    )
+
+review_temp_name = 'review_no_sentiment'
+
+with engine.connect() as conn:
+    with conn.begin():
+    # Drop and recreate the temporary table
+        with print_lock:
+            if not global_printed:
+                print(f'\nFetching Reviews...\r')
+                global_printed = True
+                aitools.move_cursor_up()
+        
+        with_retry(conn, aitools.drop_tbl_query(review_temp_name))
+        with update_lock:
+            with_retry(conn, senttools.insert_reviews(review_temp_name, MIN_REVIEW_DATEID))
+
+        print('Reviews fetched for all threads. Processing...', end='\r')
+
+
+
 def analyse_sentiment(num_workers: int, read_barrier: threading.Barrier):
     read_barrier.wait()
     aitools.print_thread_count()
@@ -92,128 +123,142 @@ def analyse_sentiment(num_workers: int, read_barrier: threading.Barrier):
         num_workers
         )
 
-    review_temp_name = '#review_no_sentiment'
-    while True:
-        with engine.connect() as conn:
-            with conn.begin():
-            # Drop and recreate the temporary table
-                with print_lock:
-                    if not global_printed:
-                        print(f'\nFetching Reviews...\r')
-                        global_printed = True
-                        aitools.move_cursor_up()
-
-                with_retry(conn, aitools.drop_tbl_query(review_temp_name))
-                with_retry(conn, senttools.insert_reviews(review_temp_name, MIN_REVIEW_DATEID))
+    # review_temp_name = 'review_no_sentiment'
+    # while True:
+    #     with engine.connect() as conn:
+    #         with conn.begin():
+    #         # Drop and recreate the temporary table
+    #             with print_lock:
+    #                 if not global_printed:
+    #                     print(f'\nFetching Reviews...\r')
+    #                     global_printed = True
+    #                     aitools.move_cursor_up()
                 
-                read_barrier.wait()
-                print('Reviews fetched for all threads. Processing...', end='\r')
-
-
-            while True:
-                completed = 0
-                failed = 0
-                try_count = 1
+    #             # with_retry(conn, aitools.drop_tbl_query(review_temp_name))
+    #             with update_lock:
+    #                 with_retry(conn, senttools.insert_reviews(review_temp_name, MIN_REVIEW_DATEID))
+                
+    #             read_barrier.wait()
+    #             print('Reviews fetched for all threads. Processing...', end='\r')
+    try_count = 0
+    while True:
+        with engine.begin() as conn:
+            if try_count == 0:
+                current_offset = get_next_offset()
                 num_rows = DEFAULT_NUM_ROWS
 
-                current_offset = get_next_offset()
-                try:
-                    with conn.begin():
+            completed = 0
+            failed = 0
+
+            try:
+                if global_remaining is None:
+                    with update_lock:
                         if global_remaining is None:
-                            with update_lock:
-                                if global_remaining is None:
-                                    global_remaining = senttools.get_count_remaining(
-                                        conn,
-                                        MIN_REVIEW_DATEID
-                                        )
+                            global_remaining = senttools.get_count_remaining(
+                                conn,
+                                MIN_REVIEW_DATEID
+                                )
 
-                        # Fetch rows for sentiment analysis
-                        reviews = senttools.get_remaining_sentiment_rows(review_temp_name, current_offset, num_rows, conn)
+                # Fetch rows for sentiment analysis
+                reviews = senttools.get_remaining_sentiment_rows(review_temp_name, current_offset, num_rows, conn)
 
-                        if reviews.empty:
-                            print(f"No more reviews to process at offset {current_offset}")
-                            break
+                if reviews.empty:
+                    print(f"No more reviews to process at offset {current_offset}")
+                    break
 
-                        # raw_reviews = reviews['ReviewText']
+                # raw_reviews = reviews['ReviewText']
+                
+                # remove stop words and non-alpha characters
+                reviews.ReviewText = reviews.ReviewText.apply(
+                            lambda x: ' '.join(
+                                [word for word in x.split() if word not in (stops)]
+                                )
+                ).str.replace('[^a-zA-Z ]', '', regex=True).str.strip()
+
+                review_json = reviews.to_json(orient='records')
+                prompt = senttools.sentiment_prompt(review_json, num_rows)
+
+                output_table = aitools.process_completion(client, prompt, senttools.JSON_FORMAT)
+
+                # Sentiment 10 -> 1
+                # Sentiment 5 -> 0
+                # Sentiment 0 -> -1
+                # Previously Unknown Sentiment of -1 now = -1.2. Set to '-' in SQL.
+                output_table["Sentiment"] = (output_table["Sentiment"] - 5) / 5
+                
+                inputIDs = reviews['ReviewID'].to_list()
+                outputIDs = output_table['ReviewID'].to_list()
+
+                # print(output_table['Sentiment'].to_list())
+
+                # ensure that no two threaads have updated the same id more than once.
+                # this should hopefully never happen due to offset increment. 
+                if try_count == 0:
+                    duplicate_found = any(i in list(id_queue) for i in inputIDs)
+                    if duplicate_found:
+                        # TODO: skip batch or retry instead...
+                        print('Duplicate IDs found!')
+
+                        quit()
                         
-                        # remove stop words and non-alpha characters
-                        reviews.ReviewText = reviews.ReviewText.apply(
-                                    lambda x: ' '.join(
-                                        [word for word in x.split() if word not in (stops)]
-                                        )
-                        ).str.replace('[^a-zA-Z ]', '', regex=True).str.strip()
-
-                        review_json = reviews.to_json(orient='records')
-                        prompt = senttools.sentiment_prompt(review_json, num_rows)
-
-                        output_table = aitools.process_completion(client, prompt, senttools.JSON_FORMAT)
-
-                        # Sentiment 10 -> 1
-                        # Sentiment 5 -> 0
-                        # Sentiment 0 -> -1
-                        # Previously Unknown Sentiment of -1 now = -1.2. Set to '-' in SQL.
-                        output_table["Sentiment"] = (output_table["Sentiment"] - 5) / 5
-                        
-                        inputIDs = reviews['ReviewID'].to_list()
-                        outputIDs = output_table['ReviewID'].to_list()
-                        # print(output_table['Sentiment'].to_list())
-
-                        # ensure that no two threaads have updated the same id more than once.
-                        # this should hopefully never happen due to offset increment. 
-                        duplicate_found = any(i in list(id_queue.queue) for i in inputIDs)
-                        if duplicate_found:
-                            # TODO: skip batch or retry instead...
-                            print('Duplicate IDs found!')
-                            quit()
                         # Add IDs to the queue
                         for i in inputIDs:
-                            id_queue.put(i)
+                            id_queue.append(i)
 
 
-                        output_sentiment = output_table['Sentiment'].to_list()
-                        invalid_output_sentiment = [
-                            x for x in set(output_sentiment) if not -1.2 <= x <= 1.0 or (x * 10) % 2 != 0
-                            ]
+                output_sentiment = output_table['Sentiment'].to_list()
+                invalid_output_sentiment = [
+                    x for x in set(output_sentiment) if not -1.2 <= x <= 1.0 or (x * 10) % 2 != 0
+                    ]
 
-                        sentiment_temp_name = '#temp'
-                        reduce_factor = 0.2
-                        if try_count != 3:
-                            # TODO: consider repeatedly inserting into pd df,
-                            # then doing a batch update when that df has e.g. 1000 rows
-                            with update_lock:
-                                if inputIDs == outputIDs and not invalid_output_sentiment:
-                                    conn.execute(sa.text(aitools.drop_tbl_query(sentiment_temp_name)))
-                                    aitools.table_to_sqltbl(
-                                        output_table,
-                                        sentiment_temp_name,
-                                        'ReviewID',
-                                        conn)
-                                    
-                                    conn.execute(sa.text(senttools.update_review_tbl_query(sentiment_temp_name)))
-                                    completed_rows = senttools.count_completed(sentiment_temp_name, conn)
-                                    
-                                    completed += completed_rows
-                                    
-                                else:
-                                    try_count += 1
-                                    num_rows = max(1, int(num_rows * (1 - reduce_factor)))
-                                    continue
-
-                        elif try_count == 3:
-                            failed += num_rows
+            
+                sentiment_temp_name = '#temp'
+                reduce_factor = 0.2
+                if try_count != 3:
+                    # TODO: consider repeatedly inserting into pd df,
+                    # then doing a batch update when that df has e.g. 1000 rows
+                    with update_lock:
+                        if inputIDs == outputIDs and not invalid_output_sentiment:
+                            conn.execute(sa.text(aitools.drop_tbl_query(sentiment_temp_name)))
+                            aitools.table_to_sqltbl(
+                                output_table,
+                                sentiment_temp_name,
+                                'ReviewID',
+                                conn)
                             
-                            # TODO: add logging
-                            aitools.print_failed_review_err(current_offset)
+                            conn.execute(sa.text(senttools.update_review_tbl_query(sentiment_temp_name)))
+                            completed_rows = senttools.count_completed(sentiment_temp_name, conn)
+                            
+                            completed += completed_rows
+                            
+                        else:
+                            try_count += 1
+                            num_rows = max(1, int(num_rows * (1 - reduce_factor)))
 
-                            # skip the batch if failed 3x
-                            get_next_offset(num_rows)
+                            # remove bad batch from ID queue
+                            # IDs in the reduced batch will be appended next loop.               
+                            for i in inputIDs:
+                                if i in list(id_queue):
+                                    id_queue.remove(i)
 
-                        update_global_counters(completed, failed, conn, print_status=True)
+                            continue
 
-                except Exception as e:
-                    aitools.print_failed_review_err(current_offset, error=e)
-                    aitools.print_thread_count(end='\n')
-                    break
+                else:
+                    failed += num_rows
+                    
+                    # TODO: add logging
+                    aitools.print_failed_review_err(current_offset)
+
+                    # skip the batch if failed 3x
+                    current_offset = get_next_offset(num_rows)
+
+                update_global_counters(completed, failed, conn, print_status=True)
+                try_count = 0
+
+            except Exception as e:
+                aitools.print_failed_review_err(current_offset, error=e)
+                aitools.print_thread_count(end='\n')
+                break
 
 
 def main(num_workers: int = None):
