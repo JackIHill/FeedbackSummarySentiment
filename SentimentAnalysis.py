@@ -1,5 +1,10 @@
 import sqlalchemy as sa
-from sqlalchemy.engine.base import Connection # for type hints
+
+ # for type hints
+from sqlalchemy.engine.base import Connection, Engine
+from openai import OpenAI
+from typing import Optional
+
 import pyodbc
 
 from credentials.SQL_Credentials import username, password, server, database, driver
@@ -9,11 +14,9 @@ import tools.sentimenttools as senttools
 import tools.aitools as aitools
 
 import threading
-from queue import Queue
+from collections import deque
 from concurrent import futures
 
-from typing import Optional
-import os
 import time
 
 stops = aitools.get_stops()
@@ -24,11 +27,12 @@ DEFAULT_NUM_ROWS: int = 40
 MIN_REVIEW_DATEID: Optional[int] = None
 
 # Shared lock and offset for thread-safe increment
+count_lock = threading.Lock()
 update_lock = threading.Lock()
 offset_lock = threading.Lock()
 print_lock = threading.Lock()
+queue_lock = threading.Lock()
 
-from collections import deque
 id_queue = deque()
 
 global_offset: int = 0
@@ -45,7 +49,7 @@ def update_global_counters(
         print_status: bool = True):
     
     global global_completed, global_failed, global_remaining
-    with update_lock:
+    with count_lock:
         global_completed += completed
         global_failed += failed
         global_remaining = senttools.get_count_remaining(conn, MIN_REVIEW_DATEID)
@@ -76,22 +80,13 @@ def with_retry(conn: Connection, query: str, max_retries: int = 3):
                 raise e
 
 
-num_workers = 13
-client, engine = aitools.establish_connection(
-    API_KEY,
-    username,
-    password,
-    server,
-    database,
-    driver,
-    num_workers
-    )
+def fetch_reviews(engine: Engine, review_temp_name: str):
+    # TODO: when everything is a class method, can set review_temp_name as a class attribute
+    # then analyse_sentiment can access that self.review_temp_name where needed.
+    global global_printed
 
-review_temp_name = 'review_no_sentiment'
-
-with engine.connect() as conn:
-    with conn.begin():
-    # Drop and recreate the temporary table
+    with engine.begin() as conn:
+        # Drop and recreate the temporary table
         with print_lock:
             if not global_printed:
                 print(f'\nFetching Reviews...\r')
@@ -105,41 +100,18 @@ with engine.connect() as conn:
         print('Reviews fetched for all threads. Processing...', end='\r')
 
 
-
-def analyse_sentiment(num_workers: int, read_barrier: threading.Barrier):
+def analyse_sentiment(
+        client: OpenAI,
+        engine: Engine,
+        read_barrier: threading.Barrier,
+        review_temp_name: str):
+        
     read_barrier.wait()
     aitools.print_thread_count()
 
     global global_printed
     global global_remaining
 
-    client, engine = aitools.establish_connection(
-        API_KEY,
-        username,
-        password,
-        server,
-        database,
-        driver,
-        num_workers
-        )
-
-    # review_temp_name = 'review_no_sentiment'
-    # while True:
-    #     with engine.connect() as conn:
-    #         with conn.begin():
-    #         # Drop and recreate the temporary table
-    #             with print_lock:
-    #                 if not global_printed:
-    #                     print(f'\nFetching Reviews...\r')
-    #                     global_printed = True
-    #                     aitools.move_cursor_up()
-                
-    #             # with_retry(conn, aitools.drop_tbl_query(review_temp_name))
-    #             with update_lock:
-    #                 with_retry(conn, senttools.insert_reviews(review_temp_name, MIN_REVIEW_DATEID))
-                
-    #             read_barrier.wait()
-    #             print('Reviews fetched for all threads. Processing...', end='\r')
     try_count = 0
     while True:
         with engine.begin() as conn:
@@ -194,16 +166,17 @@ def analyse_sentiment(num_workers: int, read_barrier: threading.Barrier):
                 # ensure that no two threaads have updated the same id more than once.
                 # this should hopefully never happen due to offset increment. 
                 if try_count == 0:
-                    duplicate_found = any(i in list(id_queue) for i in inputIDs)
-                    if duplicate_found:
-                        # TODO: skip batch or retry instead...
-                        print('Duplicate IDs found!')
-
-                        quit()
+                    with queue_lock:
+                        duplicate_found = any(i in list(id_queue) for i in inputIDs)
+                        if duplicate_found:
+                            # TODO: skip batch or retry instead...
+                            print('Duplicate IDs found!')
+                            quit()
                         
                         # Add IDs to the queue
-                        for i in inputIDs:
-                            id_queue.append(i)
+
+                    for i in inputIDs:
+                        id_queue.append(i)
 
 
                 output_sentiment = output_table['Sentiment'].to_list()
@@ -238,8 +211,9 @@ def analyse_sentiment(num_workers: int, read_barrier: threading.Barrier):
                             # remove bad batch from ID queue
                             # IDs in the reduced batch will be appended next loop.               
                             for i in inputIDs:
-                                if i in list(id_queue):
-                                    id_queue.remove(i)
+                                with queue_lock:
+                                    if i in list(id_queue):
+                                        id_queue.remove(i)
 
                             continue
 
@@ -265,13 +239,26 @@ def main(num_workers: int = None):
     """
     Executes sentiment analysis across multiple threads.
     """        
-    # Use ThreadPoolExecutor to execute analyse_sentiment in parallel
+
     with futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
         actual_num_workers = executor._max_workers
         read_barrier = threading.Barrier(actual_num_workers)
-        
+
+        client, engine = aitools.establish_connection(
+            API_KEY,
+            username,
+            password,
+            server,
+            database,
+            driver,
+            actual_num_workers
+            )
+
+        review_temp_name = 'review_no_sentiment'
+        fetch_reviews(engine, review_temp_name)
+
         executor.map(
-            lambda _: analyse_sentiment(actual_num_workers, read_barrier),
+            lambda _: analyse_sentiment(client, engine, read_barrier, review_temp_name),
                       range(actual_num_workers)
             )
 

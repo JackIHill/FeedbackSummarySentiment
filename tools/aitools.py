@@ -61,7 +61,8 @@ def process_completion(client: OpenAI, prompt: str, json_format) -> pd.DataFrame
 
 
 def print_thread_count(end: str = '\r'):
-    print(f'Active Threads: {threading.active_count()}', end=end, flush=True)
+    # :<50 to add white space and prevent overlap with other console messages.
+    print(f'Active Threads: {threading.active_count():<50}', end=end, flush=True)
 
 
 def move_cursor_up():
@@ -69,6 +70,8 @@ def move_cursor_up():
 
 
 def print_result(num_rows: int, completed: int, remaining: int, failed: int, end: str = '\r', flush: bool = True):
+    # :<50 to add white space and prevent overlap with other console messages.
+
     if remaining <= num_rows:
         end = '' 
 
