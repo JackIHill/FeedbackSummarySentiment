@@ -18,7 +18,8 @@ import time
 
 stops = aitools.get_stops()
 
-num_workers = os.cpu_count() * 5
+# TODO: make dataclass for globals 
+
 DEFAULT_NUM_ROWS: int = 40
 MIN_REVIEW_DATEID: Optional[int] = None
 
@@ -26,7 +27,6 @@ MIN_REVIEW_DATEID: Optional[int] = None
 update_lock = threading.Lock()
 offset_lock = threading.Lock()
 print_lock = threading.Lock()
-read_barrier = threading.Barrier(num_workers)
 
 id_queue = Queue()
 
@@ -75,7 +75,8 @@ def with_retry(conn: Connection, query: str, max_retries: int = 3):
                 raise e
 
 
-def analyse_sentiment():
+def analyse_sentiment(num_workers: int, read_barrier: threading.Barrier):
+    read_barrier.wait()
     aitools.print_thread_count()
 
     global global_printed
@@ -90,11 +91,6 @@ def analyse_sentiment():
         driver,
         num_workers
         )
-
-    completed = 0
-    failed = 0
-    try_count = 1
-    num_rows = DEFAULT_NUM_ROWS
 
     review_temp_name = '#review_no_sentiment'
     while True:
@@ -115,6 +111,11 @@ def analyse_sentiment():
 
 
             while True:
+                completed = 0
+                failed = 0
+                try_count = 1
+                num_rows = DEFAULT_NUM_ROWS
+
                 current_offset = get_next_offset()
                 try:
                     with conn.begin():
@@ -175,8 +176,10 @@ def analyse_sentiment():
                             ]
 
                         sentiment_temp_name = '#temp'
-                        scale_factor = 0.2
+                        reduce_factor = 0.2
                         if try_count != 3:
+                            # TODO: consider repeatedly inserting into pd df,
+                            # then doing a batch update when that df has e.g. 1000 rows
                             with update_lock:
                                 if inputIDs == outputIDs and not invalid_output_sentiment:
                                     conn.execute(sa.text(aitools.drop_tbl_query(sentiment_temp_name)))
@@ -193,7 +196,7 @@ def analyse_sentiment():
                                     
                                 else:
                                     try_count += 1
-                                    num_rows = max(1, int(num_rows * (1 - scale_factor)))
+                                    num_rows = max(1, int(num_rows * (1 - reduce_factor)))
                                     continue
 
                         elif try_count == 3:
@@ -204,14 +207,8 @@ def analyse_sentiment():
 
                             # skip the batch if failed 3x
                             get_next_offset(num_rows)
-                            num_rows = DEFAULT_NUM_ROWS
-
 
                         update_global_counters(completed, failed, conn, print_status=True)
-                        completed = 0
-                        failed = 0
-                        try_count = 1
-                    
 
                 except Exception as e:
                     aitools.print_failed_review_err(current_offset, error=e)
@@ -219,15 +216,20 @@ def analyse_sentiment():
                     break
 
 
-def threaded(num_workers):
+def main(num_workers: int = None):
     """
     Executes sentiment analysis across multiple threads.
-    """
-    # Define the number of threads to use
-
+    """        
     # Use ThreadPoolExecutor to execute analyse_sentiment in parallel
     with futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
-        executor.map(lambda _: analyse_sentiment(), range(num_workers))
+        actual_num_workers = executor._max_workers
+        read_barrier = threading.Barrier(actual_num_workers)
+        
+        executor.map(
+            lambda _: analyse_sentiment(actual_num_workers, read_barrier),
+                      range(actual_num_workers)
+            )
 
 if __name__ == '__main__':
-    threaded(num_workers)
+    # os.cpu_count() * 5
+    main()
