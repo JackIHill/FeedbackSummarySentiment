@@ -59,6 +59,7 @@ class Shared():
 
     id_queue = deque()
 
+    total_to_process = 0
 
 class AnalyseSentiment:
     DEFAULT_NUM_ROWS = 40
@@ -80,7 +81,11 @@ class AnalyseSentiment:
         self.completed = 0
         self.failed = 0
 
-        self.num_rows = num_rows if num_rows is not None else self.DEFAULT_NUM_ROWS
+        self.num_rows = self.DEFAULT_NUM_ROWS
+        if num_rows is not None:
+            self.num_rows = num_rows
+            self.DEFAULT_NUM_ROWS = num_rows
+            
         self.review_temp_name = review_temp_name if review_temp_name is not None else self.DEFAULT_REVIEW_TEMP_NAME
         self.workers = workers if workers is not None else self.DEFAULT_NUM_WORKERS
 
@@ -134,6 +139,10 @@ class AnalyseSentiment:
 
             print('Reviews fetched for all threads. Processing...', end='\r')
 
+            self.shared.total_to_process = senttools.get_count_remaining(
+                                        conn,
+                                        MIN_REVIEW_DATEID
+                                        )
 
     def analyse_sentiment(
             self,
@@ -153,8 +162,6 @@ class AnalyseSentiment:
 
                     current_offset = self.get_next_offset()
 
-                self.logger.info(f'anlaysing rows {current_offset} to {current_offset + self.num_rows}')
-              
                 try:
                     if self.shared.remaining is None:
                         with self.shared.update_lock:
@@ -163,6 +170,11 @@ class AnalyseSentiment:
                                     conn,
                                     MIN_REVIEW_DATEID
                                     )
+
+                    if current_offset >= self.shared.total_to_process:
+                        break
+
+                    self.logger.info(f'analysing rows {current_offset} to {current_offset + self.num_rows}')
 
                     # Fetch rows for sentiment analysis
                     reviews = senttools.get_remaining_sentiment_rows(review_temp_name, current_offset, self.num_rows, conn)
@@ -197,7 +209,6 @@ class AnalyseSentiment:
                     
                     inputIDs = reviews['ReviewID'].to_list()
                     outputIDs = output_table['ReviewID'].to_list()
-
 
                     # ensure that no two threaads have updated the same id more than once.
                     # this should hopefully never happen due to offset increment. 
@@ -259,6 +270,8 @@ class AnalyseSentiment:
 
                         # skip the batch if failed 3x
                         current_offset = self.get_next_offset(self.num_rows)
+                        
+                    self.logger.info(f'Completed at offset {str(current_offset)}')
 
                     self.update_global_counters(self.completed, self.failed, conn, print_status=True)
                     self.try_count = 0
@@ -299,6 +312,5 @@ class AnalyseSentiment:
 
 
 if __name__ == '__main__':
-    # os.cpu_count() * 5
-    analyser = AnalyseSentiment(print_thread_count=False)
+    analyser = AnalyseSentiment()
     analyser.threaded()
