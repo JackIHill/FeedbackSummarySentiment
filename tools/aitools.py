@@ -141,7 +141,7 @@ def create_logger(filename: str = 'output.log', directory_name: Optional[str] = 
 
     logging.basicConfig(
         filename=f'{path if directory_name else working_directory}\{log_file_name}',
-        format='%(asctime)s %(message)s',
+        format='%(levelname)s:%(name)s:%(asctime)s:%(message)s',
         datefmt='%m/%d/%Y %H:%M:%S',
         level=logging.INFO,
         )
