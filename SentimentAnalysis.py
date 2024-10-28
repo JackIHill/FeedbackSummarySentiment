@@ -18,6 +18,7 @@ from collections import deque
 from concurrent import futures
 
 from dataclasses import dataclass
+import os
 import time
 
 # TODO: add logging
@@ -55,21 +56,27 @@ class Shared():
 
     id_queue = deque()
 
-    # TODO: rename to num_rows or similar
-    DEFAULT_NUM_ROWS = 40
-
 
 class AnalyseSentiment:
-    def __init__(self):
+    DEFAULT_NUM_ROWS = 40
+    DEFAULT_REVIEW_TEMP_NAME = 'review_no_sentiment'
+    DEFAULT_NUM_WORKERS = os.cpu_count() * 5
+
+    def __init__(
+            self,
+            num_rows: Optional[int] = None,
+            review_temp_name: Optional[str] = None,
+            workers: Optional[int] = None
+            ):
+        
         self.shared = Shared()
         self.try_count = 0
         self.completed = 0
         self.failed = 0
 
-        # move num_rows and review_temp to init(self, num_rows, review_temp...)
-        self.num_rows = self.shared.DEFAULT_NUM_ROWS
-
-        self.review_temp_name = 'review_no_sentiment'
+        self.num_rows = num_rows if num_rows is not None else self.DEFAULT_NUM_ROWS
+        self.review_temp_name = review_temp_name if review_temp_name is not None else self.DEFAULT_REVIEW_TEMP_NAME
+        self.workers = workers if workers is not None else self.DEFAULT_NUM_WORKERS
 
     def update_global_counters(
         self,
@@ -85,7 +92,7 @@ class AnalyseSentiment:
 
         if print_status:
             aitools.print_result(
-                self.shared.DEFAULT_NUM_ROWS,
+                self.DEFAULT_NUM_ROWS,
                 self.shared.completed,
                 self.shared.remaining,
                 self.shared.failed)
@@ -94,7 +101,7 @@ class AnalyseSentiment:
     # should probably use queue for this and fill with values from 1 to num_rows?
     def get_next_offset(self, increment_by: Optional[int] = None) -> int:
         if not increment_by:
-            increment_by = self.shared.DEFAULT_NUM_ROWS
+            increment_by = self.DEFAULT_NUM_ROWS
 
         with self.shared.offset_lock:
             current_offset = self.shared.offset
@@ -104,8 +111,6 @@ class AnalyseSentiment:
 
 
     def fetch_reviews(self, engine: Engine, review_temp_name: str):
-        # TODO: when everything is a class method, can set review_temp_name as a class attribute
-        # then analyse_sentiment can access that self.review_temp_name where needed.
         with engine.begin() as conn:
             # Drop and recreate the temporary table
             with self.shared.print_lock:
@@ -134,7 +139,7 @@ class AnalyseSentiment:
                 if self.try_count == 0:
                     self.completed = 0
                     self.failed = 0
-                    self.num_rows = self.shared.DEFAULT_NUM_ROWS
+                    self.num_rows = self.DEFAULT_NUM_ROWS
 
                     current_offset = self.get_next_offset()
 
@@ -151,7 +156,7 @@ class AnalyseSentiment:
                     reviews = senttools.get_remaining_sentiment_rows(review_temp_name, current_offset, self.num_rows, conn)
 
                     if reviews.empty:
-                        print(f"No more reviews to process at offset {current_offset}")
+                        print(f"No more reviews to process at offset {current_offset:<50}")
                         break
 
                     # raw_reviews = reviews['ReviewText']
@@ -197,13 +202,11 @@ class AnalyseSentiment:
                         for i in inputIDs:
                             self.shared.id_queue.append(i)
 
-
                     output_sentiment = output_table['Sentiment'].to_list()
                     invalid_output_sentiment = [
                         x for x in set(output_sentiment) if not -1.2 <= x <= 1.0 or (x * 10) % 2 != 0
                         ]
 
-                
                     sentiment_temp_name = '#temp'
                     reduce_factor = 0.2
                     if self.try_count != 3:
@@ -254,11 +257,12 @@ class AnalyseSentiment:
                     break
 
 
-    def threaded(self, num_workers: int = None):
+    def threaded(self):
         """
         Executes sentiment analysis across multiple threads.
         """        
-        
+        num_workers = self.workers
+
         with futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
             actual_num_workers = executor._max_workers
 
@@ -278,6 +282,7 @@ class AnalyseSentiment:
                 lambda _: self.analyse_sentiment(client, engine, self.review_temp_name),
                         range(actual_num_workers)
                 )
+
 
 if __name__ == '__main__':
     # os.cpu_count() * 5
