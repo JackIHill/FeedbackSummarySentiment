@@ -147,5 +147,8 @@ def create_logger(filename: str = 'output.log', directory_name: Optional[str] = 
  
     logger = logging.getLogger(__name__)
 
+    # turn off OpenAI request logs
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
     return logger
 
