@@ -12,6 +12,8 @@ import threading
 from nltk import download
 from nltk.corpus import stopwords
 
+import logging
+from pathlib import Path
 
 def drop_tbl_query(tbl_name: str) -> str:
     query = f"""
@@ -127,3 +129,23 @@ def get_stops() -> list:
 
     stops = [s for s in stopwords.words('english') if s not in allowed_stops]
     return stops
+
+
+def create_logger(filename: str = 'output.log', directory_name: Optional[str] = 'logs'):
+    log_file_name = filename
+
+    working_directory = Path(__file__).resolve().parent.parent
+
+    if directory_name:
+        path = f'{working_directory}\{directory_name}'
+        os.makedirs(path, exist_ok=True)
+
+    logging.basicConfig(
+        filename=f'{path if directory_name else working_directory}\{log_file_name}',
+        level=logging.INFO
+        )
+ 
+    logger = logging.getLogger(__name__)
+
+    return logger
+

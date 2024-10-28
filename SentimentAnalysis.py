@@ -21,7 +21,10 @@ from dataclasses import dataclass
 import os
 import time
 
-# TODO: add logging
+import logging
+from pathlib import Path
+
+
 # TODO: centralise all hardcoded values e.g. default num rows, min_date, reduce_factor, max_retries
 
 stops = aitools.get_stops()
@@ -61,12 +64,15 @@ class AnalyseSentiment:
     DEFAULT_NUM_ROWS = 40
     DEFAULT_REVIEW_TEMP_NAME = 'review_no_sentiment'
     DEFAULT_NUM_WORKERS = os.cpu_count() * 5
+    
+    logger = aitools.create_logger()
 
     def __init__(
             self,
             num_rows: Optional[int] = None,
             review_temp_name: Optional[str] = None,
-            workers: Optional[int] = None
+            workers: Optional[int] = None,
+            print_thread_count: bool = True
             ):
         
         self.shared = Shared()
@@ -77,6 +83,9 @@ class AnalyseSentiment:
         self.num_rows = num_rows if num_rows is not None else self.DEFAULT_NUM_ROWS
         self.review_temp_name = review_temp_name if review_temp_name is not None else self.DEFAULT_REVIEW_TEMP_NAME
         self.workers = workers if workers is not None else self.DEFAULT_NUM_WORKERS
+
+        self.print_thread_count = print_thread_count
+
 
     def update_global_counters(
         self,
@@ -132,7 +141,8 @@ class AnalyseSentiment:
             engine: Engine,
             review_temp_name: str):
         
-        aitools.print_thread_count()
+        if self.print_thread_count:
+            aitools.print_thread_count()
 
         while True:
             with engine.begin() as conn:
@@ -143,6 +153,8 @@ class AnalyseSentiment:
 
                     current_offset = self.get_next_offset()
 
+                self.logger.info(f'anlaysing rows {current_offset} to {current_offset + self.num_rows}')
+              
                 try:
                     if self.shared.remaining is None:
                         with self.shared.update_lock:
@@ -253,7 +265,9 @@ class AnalyseSentiment:
 
                 except Exception as e:
                     aitools.print_failed_review_err(current_offset, error=e)
-                    aitools.print_thread_count(end='\n')
+
+                    if self.print_thread_count:
+                        aitools.print_thread_count(end='\n')
                     break
 
 
@@ -286,5 +300,5 @@ class AnalyseSentiment:
 
 if __name__ == '__main__':
     # os.cpu_count() * 5
-    analyser = AnalyseSentiment()
+    analyser = AnalyseSentiment(print_thread_count=False)
     analyser.threaded()
