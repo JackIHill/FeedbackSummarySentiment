@@ -72,10 +72,11 @@ def move_cursor_up():
 
 
 def print_result(num_rows: int, completed: int, remaining: int, failed: int, end: str = '\r', flush: bool = True):
-    if (remaining < num_rows) or remaining == 0:
+    # :<50 to add white space and prevent overlap with other console messages.
+
+    if remaining <= num_rows:
         end = '' 
 
-    # :<50 to add white space and prevent overlap with other console messages.
     print(f'Completed: {completed}. Remaining: {remaining}. Failed: {failed:<50}',
            end=end,
            flush=flush
