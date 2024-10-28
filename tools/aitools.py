@@ -72,11 +72,10 @@ def move_cursor_up():
 
 
 def print_result(num_rows: int, completed: int, remaining: int, failed: int, end: str = '\r', flush: bool = True):
-    # :<50 to add white space and prevent overlap with other console messages.
-
-    if remaining <= num_rows:
+    if (remaining < num_rows) or remaining == 0:
         end = '' 
 
+    # :<50 to add white space and prevent overlap with other console messages.
     print(f'Completed: {completed}. Remaining: {remaining}. Failed: {failed:<50}',
            end=end,
            flush=flush
@@ -142,7 +141,9 @@ def create_logger(filename: str = 'output.log', directory_name: Optional[str] = 
 
     logging.basicConfig(
         filename=f'{path if directory_name else working_directory}\{log_file_name}',
-        level=logging.INFO
+        format='%(asctime)s %(message)s',
+        datefmt='%m/%d/%Y %H:%M:%S',
+        level=logging.INFO,
         )
  
     logger = logging.getLogger(__name__)
