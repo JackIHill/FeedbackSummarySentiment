@@ -31,7 +31,7 @@ stops = aitools.get_stops()
 
 MIN_REVIEW_DATEID: Optional[int] = None
 
-# make decorator?
+# TODO: make decorator
 def with_retry(conn: Connection, query: str, max_retries: int = 3):
     for attempt in range(max_retries):
         try:
@@ -71,9 +71,11 @@ class AnalyseSentiment:
     def __init__(
             self,
             num_rows: Optional[int] = None,
+            phrase_list: list = None,
+            operator_list: list = None,
             review_temp_name: Optional[str] = None,
             workers: Optional[int] = None,
-            print_thread_count: bool = True
+            print_thread_count: bool = True,
             ):
         
         self.shared = Shared()
@@ -85,7 +87,10 @@ class AnalyseSentiment:
         if num_rows is not None:
             self.num_rows = num_rows
             self.DEFAULT_NUM_ROWS = num_rows
-            
+
+        self.phrase_list = phrase_list
+        self.operator_list = operator_list
+
         self.review_temp_name = review_temp_name if review_temp_name is not None else self.DEFAULT_REVIEW_TEMP_NAME
         self.workers = workers if workers is not None else self.DEFAULT_NUM_WORKERS
 
@@ -99,11 +104,18 @@ class AnalyseSentiment:
         conn: Connection,
         print_status: bool = True):
 
+        if self.phrase_list:
+            phrase = True
+
         with self.shared.count_lock:
             self.shared.completed += completed
             self.shared.failed += failed
-            self.shared.remaining = senttools.get_count_remaining(conn, MIN_REVIEW_DATEID)
-
+            self.shared.remaining = senttools.get_count_remaining(
+                                        conn,
+                                        MIN_REVIEW_DATEID,
+                                        self.operator_list,
+                                        phrase
+                                        )
         if print_status:
             aitools.print_result(
                 self.DEFAULT_NUM_ROWS,
@@ -124,9 +136,17 @@ class AnalyseSentiment:
         return current_offset
 
 
-    def fetch_reviews(self, engine: Engine, review_temp_name: str):
+    def fetch_reviews(
+            self,
+            engine: Engine,
+            review_temp_name: str
+            ):
+        
+        if self.phrase_list:
+            phrase = True
+
         with engine.begin() as conn:
-            # Drop and recreate the temporary table
+            # Drop and recreate the temporary table:
             with self.shared.print_lock:
                 if not self.shared.printed:
                     print(f'\nFetching Reviews...\r')
@@ -135,13 +155,20 @@ class AnalyseSentiment:
             
             with self.shared.update_lock:
                 with_retry(conn, aitools.drop_tbl_query(review_temp_name))
-                with_retry(conn, senttools.insert_reviews(review_temp_name, MIN_REVIEW_DATEID))
+                with_retry(conn, senttools.insert_reviews(
+                    review_temp_name,
+                    MIN_REVIEW_DATEID,
+                    self.operator_list,
+                    phrase
+                    ))
 
             print('Reviews fetched for all threads. Processing...', end='\r')
 
             self.shared.total_to_process = senttools.get_count_remaining(
                                         conn,
-                                        MIN_REVIEW_DATEID
+                                        MIN_REVIEW_DATEID,
+                                        self.operator_list,
+                                        phrase
                                         )
 
     def analyse_sentiment(
@@ -152,6 +179,9 @@ class AnalyseSentiment:
         
         if self.print_thread_count:
             aitools.print_thread_count()
+
+        if self.phrase_list:
+            phrase = True
 
         while True:
             with engine.begin() as conn:
@@ -168,7 +198,9 @@ class AnalyseSentiment:
                             if self.shared.remaining is None:
                                 self.shared.remaining = senttools.get_count_remaining(
                                     conn,
-                                    MIN_REVIEW_DATEID
+                                    MIN_REVIEW_DATEID,
+                                    self.operator_list,
+                                    phrase
                                     )
 
                     if current_offset >= self.shared.total_to_process:
@@ -177,13 +209,11 @@ class AnalyseSentiment:
                     self.logger.info(f'analysing rows {current_offset} to {current_offset + self.num_rows}')
 
                     # Fetch rows for sentiment analysis
-                    reviews = senttools.get_remaining_sentiment_rows(review_temp_name, current_offset, self.num_rows, conn)
+                    reviews = senttools.fetch_next_batch(review_temp_name, current_offset, self.num_rows, conn)
 
                     if reviews.empty:
                         print(f"No more reviews to process at offset {current_offset:<50}")
                         break
-
-                    # raw_reviews = reviews['ReviewText']
                     
                 # TODO: split below review processing into own func
 
@@ -197,9 +227,19 @@ class AnalyseSentiment:
                     review_json = reviews.to_json(orient='records')
 
                 # TODO: split below api calling to own func
-                    prompt = senttools.sentiment_prompt(review_json, self.num_rows)
+                    # make a general 'prompt' function with phrase bool arg?
+                    if self.phrase_list:
+                        prompt = senttools.phrase_prompt(review_json, self.phrase_list)
+                        json_format = senttools.JSON_FORMAT_Phrase
+                    else:
+                        prompt = senttools.sentiment_prompt(review_json, self.num_rows)
+                        json_format = senttools.JSON_FORMAT
 
-                    output_table = aitools.process_completion(client, prompt, senttools.JSON_FORMAT)
+                    output_table = aitools.process_completion(client, prompt, json_format)
+
+                    # TODO: Output table sometimes returns None for phrase completions.
+                    # figure out why, or retry that batch if error.
+
 
                     # Sentiment 10 -> 1
                     # Sentiment 5 -> 0
@@ -226,41 +266,60 @@ class AnalyseSentiment:
                             self.shared.id_queue.append(i)
 
                     output_sentiment = output_table['Sentiment'].to_list()
+
+                    # -1.2, -1 ... 0.8, 1
+                    if not self.phrase_list:
+                        valid_output = [
+                            i / 10.0 for i in range(
+                                start=int(-1.2 * 10),
+                                stop=(int(1.0 * 10)) + 1,
+                                step=2)
+                            ]
+                    else:
+                        valid_output = [-1.2, -1, 0, 1]
+                    
                     invalid_output_sentiment = [
-                        x for x in set(output_sentiment) if not -1.2 <= x <= 1.0 or (x * 10) % 2 != 0
+                        x for x in set(output_sentiment) if x not in valid_output
                         ]
 
                     sentiment_temp_name = '#temp'
+                    sentiment_temp_name2 = '#temp2'
                     reduce_factor = 0.2
                     if self.try_count != 3:
                         # TODO: consider repeatedly inserting into pd df,
                         # then doing a batch update when that df has e.g. 1000 rows
-                        with self.shared.update_lock:
-                            if inputIDs == outputIDs and not invalid_output_sentiment:
+                        if inputIDs == outputIDs and not invalid_output_sentiment:
+                            with self.shared.update_lock:
                                 conn.execute(sa.text(aitools.drop_tbl_query(sentiment_temp_name)))
+                                conn.execute(sa.text(aitools.drop_tbl_query(sentiment_temp_name2)))
+
                                 aitools.table_to_sqltbl(
                                     output_table,
                                     sentiment_temp_name,
                                     'ReviewID',
                                     conn)
                                 
-                                conn.execute(sa.text(senttools.update_review_tbl_query(sentiment_temp_name)))
+                                if not self.phrase_list:
+                                    conn.execute(sa.text(senttools.update_review_tbl_query(sentiment_temp_name)))
+                                else:
+                                    conn.execute(sa.text(senttools.update_phrase_tbl_query(self.phrase_list)))
+
                                 completed_rows = senttools.count_completed(sentiment_temp_name, conn)
                                 
                                 self.completed += completed_rows
-                                
-                            else:
-                                self.try_count += 1
-                                self.num_rows = max(1, int(self.num_rows * (1 - reduce_factor)))
+                            
+                        else:
+                            self.try_count += 1
+                            self.num_rows = max(1, int(self.num_rows * (1 - reduce_factor)))
 
-                                # remove bad batch from ID queue
-                                # IDs in the reduced batch will be appended next loop.               
-                                for i in inputIDs:
-                                    with self.shared.queue_lock:
-                                        if i in list(self.shared.id_queue):
-                                            self.shared.id_queue.remove(i)
+                            # remove bad batch from ID queue
+                            # IDs in the reduced batch will be appended next loop.               
+                            for i in inputIDs:
+                                with self.shared.queue_lock:
+                                    if i in list(self.shared.id_queue):
+                                        self.shared.id_queue.remove(i)
 
-                                continue
+                            continue
 
                     else:
                         self.failed += self.num_rows
@@ -312,5 +371,6 @@ class AnalyseSentiment:
 
 
 if __name__ == '__main__':
-    analyser = AnalyseSentiment()
+    analyser = AnalyseSentiment(phrase_list=['price', 'value'])
     analyser.threaded()
+ 

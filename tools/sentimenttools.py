@@ -59,7 +59,7 @@ def insert_reviews(
     return query
 
 
-def get_remaining_sentiment_rows(
+def fetch_next_batch(
         from_tbl: str,
         offset: int,
         num_rows: int,
@@ -67,7 +67,7 @@ def get_remaining_sentiment_rows(
     
     query = f"""
             SELECT ReviewID, ReviewText
-            FROM {from_tbl}
+            FROM {from_tbl} with (nolock)
             WHERE rn = 1
             ORDER BY ReviewID DESC
             OFFSET {offset} ROWS
@@ -133,23 +133,25 @@ def sentiment_prompt(json: str, input_length: int) -> str:
     return prompt
 
 
-def phrase_prompt(json, phrase: str) -> str:
+def phrase_prompt(json, phrase_list: list) -> str:
+    phrase_list = ' or '.join(phrase_list)
+
     prompt = f"""
             The following JSON contains restaurant reviews (ReviewText).
             Each review is a separate entry.
-            For each review, if the review mentions {phrase} or any synonyms, return 1. Otherwise, return 0.
+            For each review, if the review mentions {phrase_list} or any synonyms, return 1. Otherwise, return 0.
             This result is PhraseFlag.
 
-            If PhraseFlag = 1, evaluate the sentiment towards the {phrase} or any synonyms, using the following keys:
+            If PhraseFlag = 1, evaluate the sentiment towards the {phrase_list} or any synonyms, using the following keys:
             10 = positive,
             0 = negative,
             5 = neutral,
             -1 = unknown.
             This result is Sentiment.
 
-            For example, if the review is like '{phrase} was great!', sentiment should = 10.
-            For example, if the review is like 'bad {phrase}', sentiment should = 0.
-            For example, if the review is like '{phrase} was fine', sentiment should = 5
+            For example, if the review is like '{phrase_list} was great!', sentiment should = 10.
+            For example, if the review is like 'bad {phrase_list}', sentiment should = 0.
+            For example, if the review is like '{phrase_list} was fine', sentiment should = 5
 
             Return the ReviewID for the corresponding ReviewText, the PhraseFlag, and Sentiment.
             Ensure the returned ReviewID is in the input list of ReviewID and all input ReviewIDs are returned.
@@ -182,13 +184,15 @@ def update_review_tbl_query(temp_name: str) -> str:
     return query
 
 
-def update_phrase_tbl_query(phrase: str) -> str:
+def update_phrase_tbl_query(phrase_list: list) -> str:
+    phrase_list = ' or '.join(phrase_list)
+
     query = f"""
             WITH cte AS (
                 SELECT
                 t.ReviewID,
                 r.ReviewText,
-                '{phrase}' Phrase,
+                '{phrase_list}' Phrase,
                 t.PhraseFlag,
                 CASE
                     WHEN t.PhraseFlag = 0 or t.Sentiment = -1.2
