@@ -4,7 +4,6 @@ import sqlalchemy as sa
 from sqlalchemy.engine.base import Connection, Engine
 from openai import OpenAI
 from typing import Optional
-
 import pyodbc
 
 from credentials.SQL_Credentials import username, password, server, database, driver
@@ -21,11 +20,9 @@ from dataclasses import dataclass
 import os
 import time
 
-import logging
-from pathlib import Path
 
-
-# TODO: centralise all hardcoded values e.g. default num rows, min_date, reduce_factor, max_retries
+# TODO: parameterise all hardcoded values e.g. default num rows, min_date, reduce_factor, max_retries
+# TODO: docstrings
 
 stops = aitools.get_stops()
 
@@ -63,7 +60,7 @@ class Shared():
 
 class AnalyseSentiment:
     DEFAULT_NUM_ROWS = 40
-    DEFAULT_REVIEW_TEMP_NAME = 'review_no_sentiment'
+    DEFAULT_REVIEW_TEMP_NAME = 'StagingReviews_SentimentProcessing'
     DEFAULT_NUM_WORKERS = os.cpu_count() * 5
     
     logger = aitools.create_logger()
@@ -87,8 +84,8 @@ class AnalyseSentiment:
         if num_rows is not None:
             self.num_rows = num_rows
             self.DEFAULT_NUM_ROWS = num_rows
-
-        self.phrase_list = phrase_list
+        
+        self.phrase_list = [phrase.title().strip() for phrase in phrase_list]
         self.operator_list = operator_list
 
         self.review_temp_name = review_temp_name if review_temp_name is not None else self.DEFAULT_REVIEW_TEMP_NAME
@@ -104,9 +101,6 @@ class AnalyseSentiment:
         conn: Connection,
         print_status: bool = True):
 
-        if self.phrase_list:
-            phrase = True
-
         with self.shared.count_lock:
             self.shared.completed += completed
             self.shared.failed += failed
@@ -114,7 +108,7 @@ class AnalyseSentiment:
                                         conn,
                                         MIN_REVIEW_DATEID,
                                         self.operator_list,
-                                        phrase
+                                        self.phrase_list
                                         )
         if print_status:
             aitools.print_result(
@@ -141,16 +135,15 @@ class AnalyseSentiment:
             engine: Engine,
             review_temp_name: str
             ):
-        
-        if self.phrase_list:
-            phrase = True
-
+    
         with engine.begin() as conn:
             # Drop and recreate the temporary table:
             with self.shared.print_lock:
                 if not self.shared.printed:
                     print(f'\nFetching Reviews...\r')
                     self.shared.printed = True
+                    
+                    # ensure following print overwrites 'Fetching Reviews...' 
                     aitools.move_cursor_up()
             
             with self.shared.update_lock:
@@ -159,7 +152,7 @@ class AnalyseSentiment:
                     review_temp_name,
                     MIN_REVIEW_DATEID,
                     self.operator_list,
-                    phrase
+                    self.phrase_list
                     ))
 
             print('Reviews fetched for all threads. Processing...', end='\r')
@@ -168,7 +161,7 @@ class AnalyseSentiment:
                                         conn,
                                         MIN_REVIEW_DATEID,
                                         self.operator_list,
-                                        phrase
+                                        self.phrase_list
                                         )
 
     def analyse_sentiment(
@@ -179,9 +172,6 @@ class AnalyseSentiment:
         
         if self.print_thread_count:
             aitools.print_thread_count()
-
-        if self.phrase_list:
-            phrase = True
 
         while True:
             with engine.begin() as conn:
@@ -200,7 +190,7 @@ class AnalyseSentiment:
                                     conn,
                                     MIN_REVIEW_DATEID,
                                     self.operator_list,
-                                    phrase
+                                    self.phrase_list
                                     )
 
                     if current_offset >= self.shared.total_to_process:
@@ -229,7 +219,7 @@ class AnalyseSentiment:
                 # TODO: split below api calling to own func
                     # make a general 'prompt' function with phrase bool arg?
                     if self.phrase_list:
-                        prompt = senttools.phrase_prompt(review_json, self.phrase_list)
+                        prompt = senttools.phrase_prompt(review_json, self.phrase_list, self.num_rows)
                         json_format = senttools.JSON_FORMAT_Phrase
                     else:
                         prompt = senttools.sentiment_prompt(review_json, self.num_rows)
@@ -268,15 +258,12 @@ class AnalyseSentiment:
                     output_sentiment = output_table['Sentiment'].to_list()
 
                     # -1.2, -1 ... 0.8, 1
-                    if not self.phrase_list:
-                        valid_output = [
-                            i / 10.0 for i in range(
-                                start=int(-1.2 * 10),
-                                stop=(int(1.0 * 10)) + 1,
-                                step=2)
-                            ]
-                    else:
-                        valid_output = [-1.2, -1, 0, 1]
+                    valid_output = [
+                        i / 10.0 for i in range(
+                            start=int(-1.2 * 10),
+                            stop=(int(1.0 * 10)) + 1,
+                            step=2)
+                        ]
                     
                     invalid_output_sentiment = [
                         x for x in set(output_sentiment) if x not in valid_output
@@ -371,6 +358,7 @@ class AnalyseSentiment:
 
 
 if __name__ == '__main__':
-    analyser = AnalyseSentiment(phrase_list=['price', 'value'])
+    phrase_list=['staff']
+    analyser = AnalyseSentiment(phrase_list=phrase_list)
     analyser.threaded()
  

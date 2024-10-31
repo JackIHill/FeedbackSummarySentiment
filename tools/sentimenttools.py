@@ -27,15 +27,21 @@ def insert_reviews(
         temptbl: str,
         min_review_dateid: Optional[int] = None,
         operator_list: Optional[list] = None,
-        phrase: bool = False) -> str: 
+        phrase_list: list = None) -> str: 
     
     where = ''
     join = ''
     where_date = min_date_query(min_review_dateid)
     op_join, where_op = operator_join_where(operator_list)
 
-    if phrase:
-        where = """AND ReviewID NOT IN (SELECT ReviewID FROM Phrase_SentimentReview)"""
+    if phrase_list:
+        phrase_list = ' or '.join(phrase_list)
+
+        where = f"""AND ReviewID NOT IN (
+                        SELECT ReviewID FROM Phrase_SentimentReview psr
+                        INNER JOIN Phrase_SentimentFlag psf ON psf.PhraseSentimentFlagID = psr.PhraseSentimentFlagID 
+                        AND psf.Phrase = '{phrase_list}'
+                )"""
     else:
         join = """
             INNER JOIN Sentiment s
@@ -81,7 +87,7 @@ def get_count_remaining(
     conn: Connection,
     min_review_dateid: Optional[int] = None,
     operator_list: Optional[list] = None,
-    phrase: bool = False) -> int:
+    phrase_list: list = None) -> int:
 
     # when move to ORM, add **kwargs for where clause.
     where = ''
@@ -89,8 +95,14 @@ def get_count_remaining(
     where_date = min_date_query(min_review_dateid)
     op_join, where_op = operator_join_where(operator_list)
 
-    if phrase:
-        where = """AND ReviewID NOT IN (SELECT ReviewID FROM Phrase_SentimentReview)"""
+    if phrase_list:
+        phrase_list = ' or '.join(phrase_list)
+
+        where = f"""AND ReviewID NOT IN (
+                        SELECT ReviewID FROM Phrase_SentimentReview psr
+                        INNER JOIN Phrase_SentimentFlag psf ON psf.PhraseSentimentFlagID = psr.PhraseSentimentFlagID 
+                        AND psf.Phrase = '{phrase_list}'
+                )"""
     else:
         join = """INNER JOIN Sentiment s
                     ON s.SentimentID = r.ReviewSentimentID
@@ -114,13 +126,13 @@ def get_count_remaining(
 
 def sentiment_prompt(json: str, input_length: int) -> str:
     prompt = f"""
-            You will analyze restaurant reviews and return a sentiment score for each review.
+            Analyze restaurant reviews and return a sentiment score for each review.
             The input is a JSON list of reviews, each with a 'ReviewID' and 'ReviewText'.
             The sentiment should be rated from 0 to 10:
             - '0' is highly negative.
             - '5' is neutral.
             - '10' is highly positive.
-            - If the sentiment is unknown or unclear, return '-1'.
+            - -1 is unknown/unclear sentiment.
 
             Requirements:
             1. Each review must have a 'ReviewID' in the output, exactly as it appears in the input.
@@ -133,28 +145,30 @@ def sentiment_prompt(json: str, input_length: int) -> str:
     return prompt
 
 
-def phrase_prompt(json, phrase_list: list) -> str:
-    phrase_list = ' or '.join(phrase_list)
+def phrase_prompt(json, phrase_list: list, input_length: int) -> str:
+    phrase_list = (' or '.join(phrase_list)).lower()
 
     prompt = f"""
-            The following JSON contains restaurant reviews (ReviewText).
-            Each review is a separate entry.
-            For each review, if the review mentions {phrase_list} or any synonyms, return 1. Otherwise, return 0.
-            This result is PhraseFlag.
+            The input is a JSON list of reviews, each with a 'ReviewID' and 'ReviewText'.
 
-            If PhraseFlag = 1, evaluate the sentiment towards the {phrase_list} or any synonyms, using the following keys:
-            10 = positive,
-            0 = negative,
-            5 = neutral,
-            -1 = unknown.
-            This result is Sentiment.
+            1. Identify phrase mentions: For each review, check if the review discusses {phrase_list} or any related terms/synonyms.
+               If discussed, set PhraseFlag = 1; otherwise set PhraseFlag = 0.
 
-            For example, if the review is like '{phrase_list} was great!', sentiment should = 10.
-            For example, if the review is like 'bad {phrase_list}', sentiment should = 0.
-            For example, if the review is like '{phrase_list} was fine', sentiment should = 5
+                Example Usage:
+                If identifying "Price or Value" then check for mentions of terms like "price" "value" "cost" or "worth".
 
-            Return the ReviewID for the corresponding ReviewText, the PhraseFlag, and Sentiment.
-            Ensure the returned ReviewID is in the input list of ReviewID and all input ReviewIDs are returned.
+            2. Analyse Sentiment: If and only if PhraseFlag = 1, evaluate the sentiment specifically towards {phrase_list}
+               or any related terms/synonyms within the review, from 0 to 10:
+
+            - '0' is negative sentiment (e.g. "bad {phrase_list}")
+            - '5' is neutral sentiment (e.g. "{phrase_list} was/were fine")
+            - '10' is positive sentiment (e.g. "{phrase_list} was/were excellent"),
+            - -1 is unknown/unclear sentiment.
+
+            Requirements:
+            1. Each review must have a 'ReviewID' in the output, exactly as it appears in the input.
+            2. The output must be a JSON list where each item contains a 'ReviewID', a 'PhraseFlag' and its corresponding 'Sentiment'.
+            3. There should be no more than {input_length} 'ReviewID's in the output.    
 
             Here are the reviews: \n\n{json}
             """
