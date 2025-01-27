@@ -23,6 +23,8 @@ import time
 
 # TODO: parameterise all hardcoded values e.g. default num rows, min_date, reduce_factor, max_retries
 # TODO: docstrings
+# TODO: comments throughout
+# TODO: apply with_retry decorator to update functions?
 
 stops = aitools.get_stops()
 
@@ -85,7 +87,7 @@ class AnalyseSentiment:
             self.num_rows = num_rows
             self.DEFAULT_NUM_ROWS = num_rows
         
-        self.phrase_list = [phrase.title().strip() for phrase in phrase_list]
+        self.phrase_list = [phrase.title().strip() for phrase in phrase_list] if phrase_list is not None else None
         self.operator_list = operator_list
 
         self.review_temp_name = review_temp_name if review_temp_name is not None else self.DEFAULT_REVIEW_TEMP_NAME
@@ -184,7 +186,7 @@ class AnalyseSentiment:
 
                 try:
                     if self.shared.remaining is None:
-                        with self.shared.update_lock:
+                        with self.shared.count_lock:
                             if self.shared.remaining is None:
                                 self.shared.remaining = senttools.get_count_remaining(
                                     conn,
@@ -214,6 +216,7 @@ class AnalyseSentiment:
                                     )
                     ).str.replace('[^a-zA-Z ]', '', regex=True).str.strip()
 
+                    # TODO: append json to dated(?) log files
                     review_json = reviews.to_json(orient='records')
 
                 # TODO: split below api calling to own func
@@ -226,7 +229,7 @@ class AnalyseSentiment:
                         json_format = senttools.JSON_FORMAT
 
                     output_table = aitools.process_completion(client, prompt, json_format)
-
+               
                     # TODO: Output table sometimes returns None for phrase completions.
                     # figure out why, or retry that batch if error.
 
@@ -247,6 +250,7 @@ class AnalyseSentiment:
                             duplicate_found = any(i in list(self.shared.id_queue) for i in inputIDs)
                             if duplicate_found:
                                 # TODO: skip batch or retry instead...
+                                # TODO: log
                                 print('Duplicate IDs found!')
                                 quit()
                             
@@ -260,9 +264,9 @@ class AnalyseSentiment:
                     # -1.2, -1 ... 0.8, 1
                     valid_output = [
                         i / 10.0 for i in range(
-                            start=int(-1.2 * 10),
-                            stop=(int(1.0 * 10)) + 1,
-                            step=2)
+                            int(-1.2 * 10),
+                            (int(1.0 * 10)) + 1,
+                            2)
                         ]
                     
                     invalid_output_sentiment = [
@@ -272,6 +276,7 @@ class AnalyseSentiment:
                     sentiment_temp_name = '#temp'
                     sentiment_temp_name2 = '#temp2'
                     reduce_factor = 0.2
+
                     if self.try_count != 3:
                         # TODO: consider repeatedly inserting into pd df,
                         # then doing a batch update when that df has e.g. 1000 rows
@@ -310,18 +315,26 @@ class AnalyseSentiment:
 
                     else:
                         self.failed += self.num_rows
-                        
-                        # TODO: add logging
+                        new_line = '\n'
+                        self.logger.info(f"""FAILED: 
+                                        REVIEWIDS: {str(f'{new_line}'.join(str(i) for i in inputIDs))}
+                                        OUTPUT: {output_table}
+                                        INVALID_SENTIMENT: {invalid_output_sentiment}
+                                        INPUT = OUTPUT: {inputIDs == outputIDs}
+                                        """)                                    
                         aitools.print_failed_review_err(current_offset)
-
+                        
                         # skip the batch if failed 3x
+                        # TODO: this might be causing the loop bug??
                         current_offset = self.get_next_offset(self.num_rows)
                         
                     self.logger.info(f'Completed at offset {str(current_offset)}')
-
                     self.update_global_counters(self.completed, self.failed, conn, print_status=True)
                     self.try_count = 0
 
+                    # TODO: log try count to try to figure out apparent loop bug? Only happens intermittently so possible
+                    # request / api issue?
+        
                 except Exception as e:
                     aitools.print_failed_review_err(current_offset, error=e)
 
@@ -358,7 +371,10 @@ class AnalyseSentiment:
 
 
 if __name__ == '__main__':
-    phrase_list=['staff']
-    analyser = AnalyseSentiment(phrase_list=phrase_list)
+    # run analyser with no params for general sentiment scoring
+    # phrase_list=['Price or Value']
+    # operator_list = ['JDW']
+    # analyser = AnalyseSentiment(operator_list=operator_list, phrase_list=phrase_list)
+    analyser = AnalyseSentiment()
     analyser.threaded()
  
