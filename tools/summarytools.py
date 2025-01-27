@@ -6,7 +6,7 @@ from typing import Optional
 
 class VenueSummary():
     def __init__(self):
-        self.table = 'Venue'
+        self.table_name = 'Venue'
         self.primary_key = 'VenueID'
         
     def get_count_remaining(
@@ -103,7 +103,7 @@ class VenueSummary():
 
 class OperatorSummary():
     def __init__(self):
-        self.table = 'Operator'
+        self.table_name = 'Operator'
         self.value_field = 'OperatorName'
         self.primary_key = 'OperatorID'
         
@@ -180,7 +180,7 @@ class OperatorSummary():
 
 class RegionSummary():
     def __init__(self):
-        self.table = 'Region'
+        self.table_name = 'Region'
         self.value_field = 'Region'
         self.primary_key = 'RegionID'
         self.foreign_key = 'OperatorID'
@@ -276,8 +276,8 @@ def summary_prompt(json, category: str) -> str:
         Each review is a separate entry.
         Write a concise, up to 50 word summary of the reviews for the {category}. Only refer to the opinions
         and sentiments in the reviews, and disregard the {category} name.
-        Don't mention anything regarding closure or opening of the {category}.
-        Don't mention names. Be as objective as possible.
+        Don't mention anything regarding closure or opening of a venue if that is the category.
+        Don't mention names. Be as objective and holistic as possible.
 
         Here are the reviews: \n\n{json}
         """
@@ -328,7 +328,7 @@ def get_unique_ids(tbl: pd.DataFrame, id_col_name: str) -> int:
 
 
 def getid_fromvalue(obj, value: str, conn: Connection) -> int:
-    query = sa.text(f"select {obj.primary_key} from {obj.table} where {obj.value_field} = '{value}'")
+    query = sa.text(f"select {obj.primary_key} from {obj.table_name} where {obj.value_field} = '{value}'")
     return int(pd.read_sql(query, conn)[f'{obj.primary_key}'][0])
 
 
