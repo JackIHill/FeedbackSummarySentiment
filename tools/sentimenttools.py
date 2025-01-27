@@ -29,6 +29,8 @@ def insert_reviews(
         operator_list: Optional[list] = None,
         phrase_list: list = None) -> str: 
     
+    # TODO: needs a cleanup
+
     where = ''
     join = ''
     where_date = min_date_query(min_review_dateid)
@@ -60,7 +62,11 @@ def insert_reviews(
             {where}
             {where_op}
             {where_date}
-            AND r.ReviewText IS NOT NULL
+            AND r.ReviewText IS NOT NULL;
+
+            ALTER TABLE {temptbl} 
+            ADD CONSTRAINT FK_ReviewID_SentimentProcessing
+            FOREIGN KEY (ReviewID) REFERENCES Review(ReviewID)
             """
     return query
 
@@ -149,13 +155,17 @@ def phrase_prompt(json, phrase_list: list, input_length: int) -> str:
     phrase_list = (' or '.join(phrase_list)).lower()
 
     prompt = f"""
-            The input is a JSON list of reviews, each with a 'ReviewID' and 'ReviewText'.
+            The input is a JSON list of restaurant/pub reviews, each with a 'ReviewID' and 'ReviewText'.
 
             1. Identify phrase mentions: For each review, check if the review discusses {phrase_list} or any related terms/synonyms.
                If discussed, set PhraseFlag = 1; otherwise set PhraseFlag = 0.
 
                 Example Usage:
-                If identifying "Price or Value" then check for mentions of terms like "price" "value" "cost" or "worth".
+                If identifying "Price or Value" then you'd check for mentions of terms such as "price", "value", "cost", or "worth".
+                If identifying "Staff Members" then you'd check for mentions of terms such as "Staff", "Manager", "Waiter" or "Bartender".
+                
+                If PhraseFlag = 1, remember the synonyms you found when flagging Phrase presence
+                to better inform the following stage.
 
             2. Analyse Sentiment: If and only if PhraseFlag = 1, evaluate the sentiment specifically towards {phrase_list}
                or any related terms/synonyms within the review, from 0 to 10:
@@ -169,6 +179,7 @@ def phrase_prompt(json, phrase_list: list, input_length: int) -> str:
             1. Each review must have a 'ReviewID' in the output, exactly as it appears in the input.
             2. The output must be a JSON list where each item contains a 'ReviewID', a 'PhraseFlag' and its corresponding 'Sentiment'.
             3. There should be no more than {input_length} 'ReviewID's in the output.    
+            4. No 'ReviewID' should be skipped, even if the sentiment is unknown (use '-1' if unsure).
 
             Here are the reviews: \n\n{json}
             """
@@ -241,9 +252,9 @@ def update_phrase_tbl_query(phrase_list: list) -> str:
             SELECT t2.ReviewID, psf.PhraseSentimentFlagID
             FROM #temp2 t2
             INNER JOIN Phrase_SentimentFlag psf
-            ON psf.Phrase = t2.Phrase
-            AND psf.PhraseFlag = t2.PhraseFlag
-            AND psf.PhraseSentimentID = t2.SentimentID
+                ON psf.Phrase = t2.Phrase
+                AND psf.PhraseFlag = t2.PhraseFlag
+                AND psf.PhraseSentimentID = t2.SentimentID
             WHERE NOT EXISTS (
                 SELECT * FROM Phrase_SentimentReview psr
                 WHERE psr.ReviewID = t2.ReviewID AND
