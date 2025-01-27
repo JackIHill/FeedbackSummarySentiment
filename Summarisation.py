@@ -30,7 +30,7 @@ def process_summaries(obj, conn: Connection, date_int: int, date_string: str):
         remaining = obj.get_count_remaining(conn, date_int, date_string) - failed
       
         if remaining == 0 : 
-            print(f'All {obj.table}s Summarised For {YEAR_MONTH.title()}.')
+            print(f'All {obj.table_name}s Summarised For {YEAR_MONTH.title()}.')
             break
         
         # Grab all non-null ReviewText reviews for a venue. 
@@ -59,7 +59,7 @@ def process_summaries(obj, conn: Connection, date_int: int, date_string: str):
         if PK_ID == unknown_region:
             output_table = pd.DataFrame({'Summary': ['-']})
         else:
-            prompt = summtools.summary_prompt(input_json, obj.table)
+            prompt = summtools.summary_prompt(input_json, obj.table_name)
             output_table = aitools.process_completion(client, prompt, summtools.JSON_FORMAT)
 
     
