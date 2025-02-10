@@ -49,6 +49,7 @@ class Shared():
     completed: int = 0
     failed: int = 0
     printed: bool = False
+    insert_query: str = None
 
     count_lock = threading.Lock()
     update_lock = threading.Lock()
@@ -106,12 +107,8 @@ class AnalyseSentiment:
         with self.shared.count_lock:
             self.shared.completed += completed
             self.shared.failed += failed
-            self.shared.remaining = senttools.get_count_remaining(
-                                        conn,
-                                        MIN_REVIEW_DATEID,
-                                        self.operator_list,
-                                        self.phrase_list
-                                        )
+            self.shared.remaining = senttools.get_count_remaining(conn, self.shared.insert_query)
+
         if print_status:
             aitools.print_result(
                 self.DEFAULT_NUM_ROWS,
@@ -151,21 +148,18 @@ class AnalyseSentiment:
             with self.shared.update_lock:
                 with_retry(conn, aitools.drop_tbl_query(review_temp_name))
 
-                insert_query = senttools.insert_reviews(
+                self.shared.insert_query = senttools.insert_reviews(
                     review_temp_name,
                     MIN_REVIEW_DATEID,
                     self.operator_list,
                     self.phrase_list
                     )
-                with_retry(conn, insert_query)
-
+                with_retry(conn, self.shared.insert_query)
 
             print('Reviews fetched for all threads. Processing...', end='\r')
 
-            self.shared.total_to_process = senttools.get_count_remaining(conn, insert_query)
+            self.shared.total_to_process = senttools.get_count_remaining(conn, self.shared.insert_query)
 
-            print(self.shared.total_to_process)
-            quit()
 
     def analyse_sentiment(
             self,
@@ -189,12 +183,7 @@ class AnalyseSentiment:
                     if self.shared.remaining is None:
                         with self.shared.count_lock:
                             if self.shared.remaining is None:
-                                self.shared.remaining = senttools.get_count_remaining(
-                                    conn,
-                                    MIN_REVIEW_DATEID,
-                                    self.operator_list,
-                                    self.phrase_list
-                                    )
+                                self.shared.remaining = senttools.get_count_remaining(conn, self.shared.insert_query)
 
                     if current_offset >= self.shared.total_to_process:
                         break
