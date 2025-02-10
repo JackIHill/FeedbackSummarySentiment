@@ -150,21 +150,22 @@ class AnalyseSentiment:
             
             with self.shared.update_lock:
                 with_retry(conn, aitools.drop_tbl_query(review_temp_name))
-                with_retry(conn, senttools.insert_reviews(
+
+                insert_query = senttools.insert_reviews(
                     review_temp_name,
                     MIN_REVIEW_DATEID,
                     self.operator_list,
                     self.phrase_list
-                    ))
+                    )
+                with_retry(conn, insert_query)
+
 
             print('Reviews fetched for all threads. Processing...', end='\r')
 
-            self.shared.total_to_process = senttools.get_count_remaining(
-                                        conn,
-                                        MIN_REVIEW_DATEID,
-                                        self.operator_list,
-                                        self.phrase_list
-                                        )
+            self.shared.total_to_process = senttools.get_count_remaining(conn, insert_query)
+
+            print(self.shared.total_to_process)
+            quit()
 
     def analyse_sentiment(
             self,
@@ -288,8 +289,8 @@ class AnalyseSentiment:
                                 aitools.table_to_sqltbl(
                                     output_table,
                                     sentiment_temp_name,
-                                    'ReviewID',
-                                    conn)
+                                    conn,
+                                    'ReviewID',)
                                 
                                 if not self.phrase_list:
                                     conn.execute(sa.text(senttools.update_review_tbl_query(sentiment_temp_name)))
