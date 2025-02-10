@@ -91,39 +91,14 @@ def fetch_next_batch(
 
 def get_count_remaining(
     conn: Connection,
-    min_review_dateid: Optional[int] = None,
-    operator_list: Optional[list] = None,
-    phrase_list: list = None) -> int:
+    query: str):
 
-    # when move to ORM, add **kwargs for where clause.
-    where = ''
-    join = ''
-    where_date = min_date_query(min_review_dateid)
-    op_join, where_op = operator_join_where(operator_list)
-
-    if phrase_list:
-        phrase_list = ' or '.join(phrase_list)
-
-        where = f"""AND ReviewID NOT IN (
-                        SELECT ReviewID FROM Phrase_SentimentReview psr
-                        INNER JOIN Phrase_SentimentFlag psf ON psf.PhraseSentimentFlagID = psr.PhraseSentimentFlagID 
-                        AND psf.Phrase = '{phrase_list}'
-                )"""
-    else:
-        join = """INNER JOIN Sentiment s
-                    ON s.SentimentID = r.ReviewSentimentID
-                    AND s.SentimentText = 'Unknown - Unprocessed' """
-
+    # everything after/including 'FROM' in the base query, up to the index creation statement.
+    query = query[query.find("FROM") : query.find(";")]
+    
     query = f"""
             SELECT count(ReviewID)
-            FROM Review r
-            {join}
-            {op_join}
-            WHERE 1=1 
-            {where}
-            {where_op}
-            {where_date}
-            AND r.ReviewText IS NOT NULL
+            {query}
             """
     
     count = int(pd.read_sql(sa.text(query), conn).to_string(index=False).strip())
