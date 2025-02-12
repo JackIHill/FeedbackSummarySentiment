@@ -3,6 +3,9 @@ import json
 import pandas as pd
 from typing import Optional
 
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+
 import sqlalchemy as sa
 from sqlalchemy.engine.base import Connection, Engine
 
@@ -25,12 +28,14 @@ def drop_tbl_query(tbl_name: str) -> str:
 def table_to_sqltbl(
         base_tbl: pd.DataFrame,
         sql_tbl_name: str,
-        idx_col_name: str,
-        conn: Connection):
+        conn: Connection,
+        idx_col_name: Optional[str] = None):
     
     base_tbl.to_sql(f'{sql_tbl_name}', conn, if_exists="replace", index=False, schema='online')
-    conn.execute(
-        sa.text(f"""CREATE INDEX idx ON {sql_tbl_name} ({idx_col_name})"""))
+
+    if idx_col_name:
+        conn.execute(
+            sa.text(f"""CREATE INDEX idx ON {sql_tbl_name} ({idx_col_name})"""))
     
 
 def process_completion(client: OpenAI, prompt: str, json_format) -> pd.DataFrame:
@@ -94,6 +99,18 @@ def print_failed_review_err(current_offset: int, error: Optional[str] = None):
 def create_temp(conn: Connection, temptblname: str, basetblname: str):
     drop_tbl_query(temptblname)
     conn.execute(sa.text(f"""SELECT * INTO {temptblname} from {basetblname}"""))
+
+
+def start_end_date(dateint, num_months):
+    end_date_obj = datetime.strptime(dateint, '%b-%y')
+    end_date_id = end_date_obj.strftime('%Y%m%d')
+    end_year, end_month = end_date_obj.year, end_date_obj.month
+
+    start_date_obj = (end_date_obj - relativedelta(months = num_months))
+    start_date_id = start_date_obj.strftime('%Y%m%d')
+    start_year, start_month = start_date_obj.year, start_date_obj.month
+
+    return end_date_id, end_year, end_month, start_date_id, start_year, start_month
 
 
 def establish_connection(
