@@ -5,6 +5,7 @@ from typing import Optional
 
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+from calendar import monthrange
 
 import sqlalchemy as sa
 from sqlalchemy.engine.base import Connection, Engine
@@ -101,16 +102,20 @@ def create_temp(conn: Connection, temptblname: str, basetblname: str):
     conn.execute(sa.text(f"""SELECT * INTO {temptblname} from {basetblname}"""))
 
 
-def start_end_date(dateint, num_months):
-    end_date_obj = datetime.strptime(dateint, '%b-%y')
-    end_date_id = end_date_obj.strftime('%Y%m%d')
-    end_year, end_month = end_date_obj.year, end_date_obj.month
+def start_end_date(MMM_YY, num_months):
+
+    def get_last_day_formatted(date_obj):
+        last_day = monthrange(date_obj.year, date_obj.month)[1]
+        dateid = f"{date_obj.year}{date_obj.month:02d}{last_day:02d}"
+        return dateid
+    
+    end_date_obj = datetime.strptime(MMM_YY, '%b-%y')
+    end_date_id = get_last_day_formatted(end_date_obj)
 
     start_date_obj = (end_date_obj - relativedelta(months = num_months))
-    start_date_id = start_date_obj.strftime('%Y%m%d')
-    start_year, start_month = start_date_obj.year, start_date_obj.month
+    start_date_id = get_last_day_formatted(start_date_obj)
 
-    return end_date_id, end_year, end_month, start_date_id, start_year, start_month
+    return start_date_id, end_date_id
 
 
 def establish_connection(
