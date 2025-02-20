@@ -70,7 +70,7 @@ class VenueSummary():
             FROM Review r
             INNER JOIN cte ON cte.ReviewID = r.ReviewID
             WHERE r.VenueID = (
-                SELECT VenueID FROM cte ORDER BY cte.VenueID
+                SELECT DISTINCT VenueID FROM cte ORDER BY cte.VenueID
                 OFFSET {offset} ROWS
                 FETCH NEXT 1 ROWS ONLY)
             GROUP BY r.VenueID, ReviewText     
