@@ -2,7 +2,8 @@ import sqlalchemy as sa
 
  # for type hints
 from sqlalchemy.engine.base import Connection, Engine
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
+
 from typing import Optional
 import pyodbc
 
@@ -28,7 +29,7 @@ import time
 
 stops = aitools.get_stops()
 
-MIN_REVIEW_DATEID: Optional[int] = None
+MIN_REVIEW_DATEID: Optional[int] = 20230201
 
 # TODO: make decorator
 def with_retry(conn: Connection, query: str, max_retries: int = 3):
@@ -64,7 +65,7 @@ class Shared():
 class AnalyseSentiment:
     DEFAULT_NUM_ROWS = 40
     DEFAULT_REVIEW_TEMP_NAME = 'StagingReviews_SentimentProcessing'
-    DEFAULT_NUM_WORKERS = os.cpu_count() * 5
+    DEFAULT_NUM_WORKERS = os.cpu_count() * 3
     
     logger = aitools.create_logger()
 
@@ -104,10 +105,12 @@ class AnalyseSentiment:
         conn: Connection,
         print_status: bool = True):
 
+        remaining_count = senttools.get_count_remaining(conn, self.shared.insert_query)
+
         with self.shared.count_lock:
             self.shared.completed += completed
             self.shared.failed += failed
-            self.shared.remaining = senttools.get_count_remaining(conn, self.shared.insert_query)
+            self.shared.remaining = remaining_count
 
         if print_status:
             aitools.print_result(
@@ -126,7 +129,7 @@ class AnalyseSentiment:
             current_offset = self.shared.offset
             self.shared.offset += increment_by
 
-        return current_offset
+            return current_offset
 
 
     def fetch_reviews(
@@ -145,21 +148,21 @@ class AnalyseSentiment:
                     # ensure following print overwrites 'Fetching Reviews...' 
                     aitools.move_cursor_up()
             
+            self.shared.insert_query = senttools.insert_reviews(
+                review_temp_name,
+                MIN_REVIEW_DATEID,
+                self.operator_list,
+                self.phrase_list
+                )
+            
             with self.shared.update_lock:
-                with_retry(conn, aitools.drop_tbl_query(review_temp_name))
+                self.shared.total_to_process = senttools.get_count_remaining(conn, self.shared.insert_query)
 
-                self.shared.insert_query = senttools.insert_reviews(
-                    review_temp_name,
-                    MIN_REVIEW_DATEID,
-                    self.operator_list,
-                    self.phrase_list
-                    )
+                with_retry(conn, aitools.drop_tbl_query(review_temp_name))
                 with_retry(conn, self.shared.insert_query)
 
             print('Reviews fetched for all threads. Processing...', end='\r')
-
-            self.shared.total_to_process = senttools.get_count_remaining(conn, self.shared.insert_query)
-
+        
 
     def analyse_sentiment(
             self,
@@ -169,7 +172,8 @@ class AnalyseSentiment:
         
         if self.print_thread_count:
             aitools.print_thread_count()
-
+        
+        incremented_after_failure = False
         while True:
             with engine.begin() as conn:
                 if self.try_count == 0:
@@ -177,13 +181,18 @@ class AnalyseSentiment:
                     self.failed = 0
                     self.num_rows = self.DEFAULT_NUM_ROWS
 
-                    current_offset = self.get_next_offset()
+                    if not incremented_after_failure:
+                        current_offset = self.get_next_offset()
+                    incremented_after_failure = False
 
                 try:
+                    with self.shared.update_lock:
+                        remaining_count = senttools.get_count_remaining(conn, self.shared.insert_query)
+
                     if self.shared.remaining is None:
                         with self.shared.count_lock:
                             if self.shared.remaining is None:
-                                self.shared.remaining = senttools.get_count_remaining(conn, self.shared.insert_query)
+                                self.shared.remaining = remaining_count
 
                     if current_offset >= self.shared.total_to_process:
                         break
@@ -232,22 +241,21 @@ class AnalyseSentiment:
                     
                     inputIDs = reviews['ReviewID'].to_list()
                     outputIDs = output_table['ReviewID'].to_list()
-
+        
                     # ensure that no two threaads have updated the same id more than once.
-                    # this should hopefully never happen due to offset increment. 
+                    # this should hopefully never happen due to offset increment (but sometimes does, why, help). 
+                    duplicate_found = None
                     if self.try_count == 0:
                         with self.shared.queue_lock:
                             duplicate_found = any(i in list(self.shared.id_queue) for i in inputIDs)
-                            if duplicate_found:
-                                # TODO: skip batch or retry instead...
-                                # TODO: log
-                                print('Duplicate IDs found!')
-                                quit()
+                            # if duplicate_found:
+                            #     # TODO: log
+                            #     print('Duplicate IDs found!')
+                            #     print()
                             
                             # Add IDs to the queue
-
-                        for i in inputIDs:
-                            self.shared.id_queue.append(i)
+                            for i in inputIDs:
+                                self.shared.id_queue.append(i)
 
                     output_sentiment = output_table['Sentiment'].to_list()
 
@@ -266,11 +274,11 @@ class AnalyseSentiment:
                     sentiment_temp_name = '#temp'
                     sentiment_temp_name2 = '#temp2'
                     reduce_factor = 0.2
-
+                    
                     if self.try_count != 3:
                         # TODO: consider repeatedly inserting into pd df,
                         # then doing a batch update when that df has e.g. 1000 rows
-                        if inputIDs == outputIDs and not invalid_output_sentiment:
+                        if inputIDs == outputIDs and not invalid_output_sentiment and not duplicate_found:
                             with self.shared.update_lock:
                                 conn.execute(sa.text(aitools.drop_tbl_query(sentiment_temp_name)))
                                 conn.execute(sa.text(aitools.drop_tbl_query(sentiment_temp_name2)))
@@ -281,6 +289,7 @@ class AnalyseSentiment:
                                     conn,
                                     'ReviewID',)
                                 
+
                                 if not self.phrase_list:
                                     conn.execute(sa.text(senttools.update_review_tbl_query(sentiment_temp_name)))
                                 else:
@@ -303,7 +312,7 @@ class AnalyseSentiment:
 
                             continue
 
-                    else:
+                    else:                        
                         self.failed += self.num_rows
                         new_line = '\n'
                         self.logger.info(f"""FAILED: 
@@ -317,15 +326,20 @@ class AnalyseSentiment:
                         # skip the batch if failed 3x
                         # TODO: this might be causing the loop bug??
                         current_offset = self.get_next_offset(self.num_rows)
+                        incremented_after_failure = True
                         
                     self.logger.info(f'Completed at offset {str(current_offset)}')
                     self.update_global_counters(self.completed, self.failed, conn, print_status=True)
+                    
+                    # print('YEP YEPO YEP')
+                    
                     self.try_count = 0
-
+                   
                     # TODO: log try count to try to figure out apparent loop bug? Only happens intermittently so possible
                     # request / api issue?
-        
+
                 except Exception as e:
+                    print('nope')
                     aitools.print_failed_review_err(current_offset, error=e)
 
                     if self.print_thread_count:
@@ -362,9 +376,20 @@ class AnalyseSentiment:
 
 if __name__ == '__main__':
     # run analyser with no params for general sentiment scoring
-    # phrase_list=['Price or Value']
-    # operator_list = ['JDW']
-    # analyser = AnalyseSentiment(operator_list=operator_list, phrase_list=phrase_list)
-    analyser = AnalyseSentiment()
+    phrase_list=['Drinks']
+    operator_list = ['ROSAS THAI',
+                    'PHO',
+                    'MOWGLI',
+                    'GIGGLING SQUID',
+                    'BANANA TREE',
+                    'NANDOS',
+                    'ZAAP THAI',
+                    'DISHOOM',
+                    'COTE',
+                    'WAGAMAMA',
+                    'THE IVY'
+                    ]
+    analyser = AnalyseSentiment(operator_list=operator_list, phrase_list=phrase_list)
+    # analyser = AnalyseSentiment()
     analyser.threaded()
- 
+  
