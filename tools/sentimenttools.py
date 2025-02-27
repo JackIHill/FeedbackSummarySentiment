@@ -93,11 +93,11 @@ def get_count_remaining(
     conn: Connection,
     query: str):
 
-    # everything after/including 'FROM' in the base query, up to the index creation statement.
+    # everything after/including 'FROM' in the base query, up to and exluding the index creation statement.
     query = query[query.find("FROM") : query.find(";")]
-    
+
     query = f"""
-            SELECT count(ReviewID)
+            SELECT count(1)
             {query}
             """
     
@@ -116,10 +116,12 @@ def sentiment_prompt(json: str, input_length: int) -> str:
             - -1 is unknown/unclear sentiment.
 
             Requirements:
-            1. Each review must have a 'ReviewID' in the output, exactly as it appears in the input.
-            2. No 'ReviewID' should be skipped, even if the sentiment is unknown (use '-1' if unsure).
-            3. The output must be a JSON list where each item contains a 'ReviewID' and its corresponding 'Sentiment'.
-            4. There should be no more than {input_length} 'ReviewID's in the output.    
+            1. Assert that every 'ReviewID' from the input is in the output, and every 'ReviewID' from the output is in the input.
+            2. No additional or missing 'ReviewID's are allowed.
+            3. Before returning the output, verify that the 'ReviewID' list is identical to the input list. If any 'ReviewID' is extra or missing, fix it before returning.
+            4. No 'ReviewID' should be skipped, even if the sentiment is unknown (use '-1' if unsure).
+            5. The output must be a JSON list where each item contains a 'ReviewID' and its corresponding 'Sentiment'.
+            6. There should be exactly {input_length} 'ReviewID's in the final output, discard and regenerate if there are not.    
                                                                 
             Here are the reviews: \n\n{json}
             """
@@ -222,7 +224,7 @@ def update_phrase_tbl_query(phrase_list: list) -> str:
                     and psf.PhraseFlag = t2.PhraseFlag
                     and psf.PhraseSentimentID = t2.SentimentID
                 )   
-            
+
             INSERT INTO Phrase_SentimentReview (ReviewID, PhraseSentimentFlagID)
             SELECT t2.ReviewID, psf.PhraseSentimentFlagID
             FROM #temp2 t2
@@ -233,7 +235,7 @@ def update_phrase_tbl_query(phrase_list: list) -> str:
             WHERE NOT EXISTS (
                 SELECT * FROM Phrase_SentimentReview psr
                 WHERE psr.ReviewID = t2.ReviewID AND
-                psr.PhraseSentimentFlagID = psf.PhraseSentimentFlagID
+                      psr.PhraseSentimentFlagID = psf.PhraseSentimentFlagID
                 )   
     """
     return query
@@ -248,7 +250,7 @@ def count_completed(temp_name: str, conn: Connection) -> int:
                     FROM {temp_name} t
                     INNER JOIN Review r ON r.ReviewID = t.ReviewID
                     )
-                SELECT count(*)
+                SELECT count(1)
                 FROM Review r
                 INNER JOIN cte on cte.ReviewText = r.ReviewText
                 """
