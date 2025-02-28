@@ -4,6 +4,8 @@ import sqlalchemy as sa
 from sqlalchemy.engine.base import Connection, Engine
 from openai import OpenAI, RateLimitError
 
+import traceback
+
 from typing import Optional
 import pyodbc
 
@@ -14,12 +16,14 @@ import tools.sentimenttools as senttools
 import tools.aitools as aitools
 
 import threading
-from collections import deque
+from collections import deque, defaultdict
 from concurrent import futures
 
 from dataclasses import dataclass
 import os
 import time
+
+import pandas as pd
 
 
 # TODO: parameterise all hardcoded values e.g. default num rows, min_date, reduce_factor, max_retries
@@ -46,7 +50,7 @@ def with_retry(conn: Connection, query: str, max_retries: int = 3):
 @dataclass
 class Shared():
     offset: int = 0
-    remaining: Optional[int] = None
+    remaining_unique_texts: Optional[int] = None
     completed: int = 0
     failed: int = 0
     printed: bool = False
@@ -54,18 +58,18 @@ class Shared():
 
     count_lock = threading.Lock()
     update_lock = threading.Lock()
-    offset_lock = threading.Lock()
     print_lock = threading.Lock()
-    queue_lock = threading.Lock()
 
-    id_queue = deque()
+    review_queue = deque()
+    review_map = defaultdict(list)
+    processed_reviews = set()
 
     total_to_process = 0
 
 class AnalyseSentiment:
-    DEFAULT_NUM_ROWS = 40
+    DEFAULT_NUM_ROWS = 50
     DEFAULT_REVIEW_TEMP_NAME = 'StagingReviews_SentimentProcessing'
-    DEFAULT_NUM_WORKERS = os.cpu_count() * 3
+    DEFAULT_NUM_WORKERS = os.cpu_count() * 5
     
     logger = aitools.create_logger()
 
@@ -105,31 +109,19 @@ class AnalyseSentiment:
         conn: Connection,
         print_status: bool = True):
 
-        remaining_count = senttools.get_count_remaining(conn, self.shared.insert_query)
+        remaining_count = len(self.shared.review_queue)
 
         with self.shared.count_lock:
             self.shared.completed += completed
             self.shared.failed += failed
-            self.shared.remaining = remaining_count
+            self.shared.remaining_unique_texts = remaining_count
 
         if print_status:
             aitools.print_result(
                 self.DEFAULT_NUM_ROWS,
                 self.shared.completed,
-                self.shared.remaining,
+                self.shared.remaining_unique_texts,
                 self.shared.failed)
-
-
-    # should probably use queue for this and fill with values from 1 to num_rows?
-    def get_next_offset(self, increment_by: Optional[int] = None) -> int:
-        if not increment_by:
-            increment_by = self.DEFAULT_NUM_ROWS
-
-        with self.shared.offset_lock:
-            current_offset = self.shared.offset
-            self.shared.offset += increment_by
-
-            return current_offset
 
 
     def fetch_reviews(
@@ -148,6 +140,26 @@ class AnalyseSentiment:
                     # ensure following print overwrites 'Fetching Reviews...' 
                     aitools.move_cursor_up()
             
+
+            conn.execute(sa.text(f""";with cte as (
+                                    select distinct ReviewText, psentr.PhraseSentimentFlagID
+                                    from Phrase_SentimentReview psentr
+                                    inner join review on review.reviewid = psentr.reviewid
+                                )
+                                insert into Phrase_SentimentReview (ReviewID, PhraseSentimentFlagID)
+                                select distinct review.ReviewID, cte.PhraseSentimentFlagID
+                                from review
+                                inner join cte on cte.ReviewText = review.ReviewText
+                                where not exists (
+                                    select * from Phrase_SentimentReview psentr
+                                    where psentr.ReviewID = review.ReviewID
+                                    and psentr.PhraseSentimentFlagID = cte.PhraseSentimentFlagID
+                                )
+                                and cte.ReviewText = 'Staff here are lovely'"""
+                                ))
+            conn.commit()
+        
+        with engine.begin() as conn:
             self.shared.insert_query = senttools.insert_reviews(
                 review_temp_name,
                 MIN_REVIEW_DATEID,
@@ -155,11 +167,24 @@ class AnalyseSentiment:
                 self.phrase_list
                 )
             
-            with self.shared.update_lock:
-                self.shared.total_to_process = senttools.get_count_remaining(conn, self.shared.insert_query)
+            rows = pd.read_sql(self.shared.insert_query, conn)  
 
-                with_retry(conn, aitools.drop_tbl_query(review_temp_name))
-                with_retry(conn, self.shared.insert_query)
+            rows['ReviewText'] = rows['ReviewText'].str.lower().apply(
+                                                    lambda x: ' '.join(
+                                                        [word for word in x.split() if word not in (stops)]
+                                                        )
+                                                    ).str.replace('[^a-zA-Z ]', '', regex=True).str.strip()
+
+            for _, row in rows.iterrows():
+                review_id, review_text = row['ReviewID'], row['ReviewText']
+                
+                self.shared.review_queue.append((review_id, review_text))
+                self.shared.review_map[review_text].append(review_id)
+
+        
+            self.shared.review_queue = deque((ids[0], text) for text, ids in self.shared.review_map.items())
+
+            self.shared.total_to_process = len(self.shared.review_queue)
 
             print('Reviews fetched for all threads. Processing...', end='\r')
         
@@ -173,91 +198,75 @@ class AnalyseSentiment:
         if self.print_thread_count:
             aitools.print_thread_count()
         
-        incremented_after_failure = False
-        while True:
+        batch = []
+        while self.shared.review_queue:
             with engine.begin() as conn:
                 if self.try_count == 0:
                     self.completed = 0
                     self.failed = 0
                     self.num_rows = self.DEFAULT_NUM_ROWS
-
-                    if not incremented_after_failure:
-                        current_offset = self.get_next_offset()
-                    incremented_after_failure = False
+                    remaining_count = len(self.shared.review_queue)
 
                 try:
-                    with self.shared.update_lock:
-                        remaining_count = senttools.get_count_remaining(conn, self.shared.insert_query)
-
-                    if self.shared.remaining is None:
+                    if self.shared.remaining_unique_texts is None:
                         with self.shared.count_lock:
-                            if self.shared.remaining is None:
-                                self.shared.remaining = remaining_count
+                            if self.shared.remaining_unique_texts is None:
+                                self.shared.remaining_unique_texts = remaining_count
 
-                    if current_offset >= self.shared.total_to_process:
-                        break
 
-                    self.logger.info(f'analysing rows {current_offset} to {current_offset + self.num_rows}')
+                    # Fetch rows
+                    if self.try_count == 0:
+                        batch = []
+                        for _ in range(min(self.num_rows, len(self.shared.review_queue))):
+                            review_id, review_text = self.shared.review_queue.popleft()
+                            batch.append((review_id, review_text, self.shared.review_map[review_text]))
 
-                    # Fetch rows for sentiment analysis
-                    reviews = senttools.fetch_next_batch(review_temp_name, current_offset, self.num_rows, conn)
+                    else:                        
+                        self.shared.review_queue.extend(batch[self.num_rows:])
+                        batch = batch[:self.num_rows]
 
-                    if reviews.empty:
-                        print(f"No more reviews to process at offset {current_offset:<50}")
-                        break
-                    
-                # TODO: split below review processing into own func
-
-                    # remove stop words and non-alpha characters
-                    reviews.ReviewText = reviews.ReviewText.apply(
-                                lambda x: ' '.join(
-                                    [word for word in x.split() if word not in (stops)]
-                                    )
-                    ).str.replace('[^a-zA-Z ]', '', regex=True).str.strip()
 
                     # TODO: append json to dated(?) log files
-                    review_json = reviews.to_json(orient='records')
+                    batch_json = [
+                        {'ReviewID': rev_id, 'ReviewText': rev_text} for rev_id, rev_text, _ in batch
+                    ]
+
 
                 # TODO: split below api calling to own func
                     # make a general 'prompt' function with phrase bool arg?
                     if self.phrase_list:
-                        prompt = senttools.phrase_prompt(review_json, self.phrase_list, self.num_rows)
+                        prompt = senttools.phrase_prompt(batch_json, self.phrase_list, self.num_rows)
                         json_format = senttools.JSON_FORMAT_Phrase
                     else:
-                        prompt = senttools.sentiment_prompt(review_json, self.num_rows)
+                        prompt = senttools.sentiment_prompt(batch_json, self.num_rows)
                         json_format = senttools.JSON_FORMAT
 
-                    output_table = aitools.process_completion(client, prompt, json_format)
-               
+                    processed_table = aitools.process_completion(client, prompt, json_format)
+                    batch_df = pd.DataFrame(batch, columns=['ReviewID', 'ReviewText', 'MatchedTextIDs'])
+
+                    # print("batch_df columns:", batch_df.columns)
+                    # print("processed_table columns:", processed_table.columns)
+                    
+                    merge_batch_output_df = pd.merge(batch_df, processed_table, on='ReviewID', how='left')
+                    exploded_merge_df = merge_batch_output_df.explode('MatchedTextIDs').reset_index()
+
+                    final_output = exploded_merge_df[['MatchedTextIDs', 'PhraseFlag', 'Sentiment']]
+                    final_output = final_output.rename(columns={'MatchedTextIDs': 'ReviewID'})
+
+
                     # TODO: Output table sometimes returns None for phrase completions.
                     # figure out why, or retry that batch if error.
-
 
                     # Sentiment 10 -> 1
                     # Sentiment 5 -> 0
                     # Sentiment 0 -> -1
                     # Previously Unknown Sentiment of -1 now = -1.2. Set to '-' in SQL.
-                    output_table["Sentiment"] = (output_table["Sentiment"] - 5) / 5
+                    final_output["Sentiment"] = (final_output["Sentiment"] - 5) / 5
                     
-                    inputIDs = reviews['ReviewID'].to_list()
-                    outputIDs = output_table['ReviewID'].to_list()
-        
-                    # ensure that no two threaads have updated the same id more than once.
-                    # this should hopefully never happen due to offset increment (but sometimes does, why, help). 
-                    duplicate_found = None
-                    if self.try_count == 0:
-                        with self.shared.queue_lock:
-                            duplicate_found = any(i in list(self.shared.id_queue) for i in inputIDs)
-                            # if duplicate_found:
-                            #     # TODO: log
-                            #     print('Duplicate IDs found!')
-                            #     print()
-                            
-                            # Add IDs to the queue
-                            for i in inputIDs:
-                                self.shared.id_queue.append(i)
+                    inputIDs = [rev_id for rev_id, _, _ in batch]
+                    outputIDs = processed_table['ReviewID'].to_list()
 
-                    output_sentiment = output_table['Sentiment'].to_list()
+                    output_sentiment = final_output['Sentiment'].to_list()
 
                     # -1.2, -1 ... 0.8, 1
                     valid_output = [
@@ -274,17 +283,18 @@ class AnalyseSentiment:
                     sentiment_temp_name = '#temp'
                     sentiment_temp_name2 = '#temp2'
                     reduce_factor = 0.2
-                    
+
+
                     if self.try_count != 3:
                         # TODO: consider repeatedly inserting into pd df,
                         # then doing a batch update when that df has e.g. 1000 rows
-                        if inputIDs == outputIDs and not invalid_output_sentiment and not duplicate_found:
+                        if inputIDs == outputIDs and not invalid_output_sentiment:
                             with self.shared.update_lock:
                                 conn.execute(sa.text(aitools.drop_tbl_query(sentiment_temp_name)))
                                 conn.execute(sa.text(aitools.drop_tbl_query(sentiment_temp_name2)))
 
                                 aitools.table_to_sqltbl(
-                                    output_table,
+                                    final_output,
                                     sentiment_temp_name,
                                     conn,
                                     'ReviewID',)
@@ -295,20 +305,13 @@ class AnalyseSentiment:
                                 else:
                                     conn.execute(sa.text(senttools.update_phrase_tbl_query(self.phrase_list)))
 
-                                completed_rows = senttools.count_completed(sentiment_temp_name, conn)
-                                
-                                self.completed += completed_rows
+                                inserted_rows = len(final_output.index)
+                                completed = len(batch)
+                                self.completed += completed
                             
                         else:
                             self.try_count += 1
                             self.num_rows = max(1, int(self.num_rows * (1 - reduce_factor)))
-
-                            # remove bad batch from ID queue
-                            # IDs in the reduced batch will be appended next loop.               
-                            for i in inputIDs:
-                                with self.shared.queue_lock:
-                                    if i in list(self.shared.id_queue):
-                                        self.shared.id_queue.remove(i)
 
                             continue
 
@@ -317,30 +320,23 @@ class AnalyseSentiment:
                         new_line = '\n'
                         self.logger.info(f"""FAILED: 
                                         REVIEWIDS: {str(f'{new_line}'.join(str(i) for i in inputIDs))}
-                                        OUTPUT: {output_table}
+                                        OUTPUT: {final_output}
                                         INVALID_SENTIMENT: {invalid_output_sentiment}
                                         INPUT = OUTPUT: {inputIDs == outputIDs}
-                                        """)                                    
-                        aitools.print_failed_review_err(current_offset)
+                                        """)      
                         
-                        # skip the batch if failed 3x
-                        # TODO: this might be causing the loop bug??
-                        current_offset = self.get_next_offset(self.num_rows)
-                        incremented_after_failure = True
+                        # batch failed, dump back into queue for second chance later.
+
+                        #below 2 should be identical
+                        # self.shared.review_queue.extend(batch[:self.num_rows])
+                        self.shared.review_queue.extend(batch)
                         
-                    self.logger.info(f'Completed at offset {str(current_offset)}')
-                    self.update_global_counters(self.completed, self.failed, conn, print_status=True)
-                    
-                    # print('YEP YEPO YEP')
+                        self.update_global_counters(self.completed, self.failed, conn, print_status=True)
                     
                     self.try_count = 0
-                   
-                    # TODO: log try count to try to figure out apparent loop bug? Only happens intermittently so possible
-                    # request / api issue?
 
                 except Exception as e:
-                    print('nope')
-                    aitools.print_failed_review_err(current_offset, error=e)
+                    print("Traceback:\n", traceback.format_exc())
 
                     if self.print_thread_count:
                         aitools.print_thread_count(end='\n')
@@ -376,7 +372,7 @@ class AnalyseSentiment:
 
 if __name__ == '__main__':
     # run analyser with no params for general sentiment scoring
-    phrase_list=['Drinks']
+    phrase_list=['Atmosphere']
     operator_list = ['ROSAS THAI',
                     'PHO',
                     'MOWGLI',

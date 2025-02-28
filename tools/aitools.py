@@ -18,6 +18,9 @@ from nltk.corpus import stopwords
 
 import logging
 from pathlib import Path
+import time
+
+import orjson as json
 
 def drop_tbl_query(tbl_name: str) -> str:
     query = f"""
@@ -39,34 +42,46 @@ def table_to_sqltbl(
             sa.text(f"""CREATE INDEX idx ON {sql_tbl_name} ({idx_col_name})"""))
     
 
-def process_completion(client: OpenAI, prompt: str, json_format) -> pd.DataFrame:
-    completion = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "user", "content": prompt}
-        ],
-        response_format=json_format,
-        temperature=0
-        # max_tokens=500
-        )
+def process_completion(client: OpenAI, prompt: str, json_format) -> pd.DataFrame:        
+    MAX_RETRIES = 10
+    RETRY_DELAY = 5
+    output_table = None
 
-    try:
-        event = fr"""{completion.choices[0].message.content}"""
-    except json.decoder.JSONDecodeError as e:
-        errmsg = f"""
-            JSON decode failure: Prompt: {prompt}
-            Completion: {completion}. 
-            """
-        e.add_note(errmsg)
-        raise 
+    for attempt in range(MAX_RETRIES):
+        try:
+            completion = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                response_format=json_format,
+                temperature=0
+                )
+            
+            if not completion or not completion.choices or not completion.choices[0].message.content.strip():
+                raise ValueError("Empty response received")
+            
+            event = completion.choices[0].message.content.strip()
+
+            parsed_event = json.loads(event)
+
+            json_name = next(iter(parsed_event))
+            output_json = parsed_event[json_name]
+
+            output_table = pd.DataFrame.from_records(output_json)
+
+            if 'ReviewID' not in output_table.columns:
+                raise ValueError("Nope")
+            
+            return output_table
         
-    json_name = list(json.loads(event).keys())[0]
-
-    output_json = json.loads(event)[f'{json_name}']
-    output_table = pd.DataFrame(pd.json_normalize(output_json))
-
-    return output_table
-
+        except Exception as e:
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_DELAY)
+            else:
+                print(f"Max API call retries reached. Exiting. \n{e}")
+                
+    return pd.DataFrame()
 
 def print_thread_count(end: str = '\r'):
     # :<50 to add white space and prevent overlap with other console messages.
@@ -83,7 +98,7 @@ def print_result(num_rows: int, completed: int, remaining: int, failed: int, end
     if remaining <= num_rows:
         end = '' 
 
-    print(f'Completed: {completed}. Remaining: {remaining}. Failed: {failed:<50}',
+    print(f'Completed: {completed}. Remaining: {remaining}. Failed: {failed}. Num Threads: {threading.active_count():<50}',
            end=end,
            flush=flush
         )
