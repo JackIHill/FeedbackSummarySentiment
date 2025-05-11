@@ -1,0 +1,1853 @@
+
+* {
+    box-sizing: border-box;
+    font-family: "Inter", sans-serif;
+    font-optical-sizing: auto;
+    font-weight: 400;
+    font-style: normal;
+    font-variation-settings:
+      "wdth" 100;
+    /* text-transform: lowercase; */
+}
+
+
+*:not(.select-container *) {
+    transition: background-color 0.1s ease;
+}
+
+:root {
+    /* light */
+    --primary-color: hsl(210, 75%, 65%);
+    --secondary-color: hsl(210, 75%, 85%);
+    --accent-color: hsl(210, 75%, 55%);
+    --tertiary-color: hsl(210, 75%, 40%);
+
+    --background-color: hsl(210, 20%, 95%);
+    --background-color2: hsl(198, 40%, 96%);
+
+    --disabled-color: hsl(198, 20%, 85%);
+    
+    --surface-color: hsl(0, 0%, 100%);
+
+    --primary-text-color: hsl(210, 30%, 10%);
+    --accent-text-color: hsl(210, 75%, 100%);
+    --lower-visibility-color: hsl(210, 30%, 75%);
+    --positive-sentiment-text-color: hsl(150, 80%, 35%);
+    --neutral-sentiment-text-color: hsl(60, 80%, 35%);
+    --negative-sentiment-text-color: hsl(345, 80%, 45%);
+
+
+    --primary-color-rgb-triplet: 99, 166, 233; /* for controlling opacity, see drop down scrollbars. */
+
+    --defBorderRad: 28px;
+    --defContentPadding: 25px;
+
+    --defBorderWidth: 1px;
+    --dropDownPadding: 7px
+}
+
+
+body {
+    margin: 0;
+    height: 100%;
+    color: var(--primary-text-color);
+    /* "Avant Garde Gothic", "Avant Garde", "Avantgarde", "Century Gothic", "CenturyGothic", "AppleGothic",sans-serif; */
+    background-color: var(--background-color);
+}
+
+.dark {
+    /* dark */
+    --primary-color: hsl(210, 75%, 45%);
+    --secondary-color: hsl(210, 75%, 15%);
+    --tertiary-color: hsl(210, 75%, 75%);
+
+    --surface-color: hsl(210, 20%, 15%);
+
+    --disabled-color: hsl(198, 20%, 15%);
+    /* --lower-visibility-color: rgba(0, 0, 0, 0.7); */
+    
+    --background-color: hsl(198, 40%, 8%);
+    --background-color2: hsl(198, 40%, 10%);
+
+
+    --primary-text-color: hsl(210, 30%, 90%);
+    --accent-text-color: var(--primary-text-color);
+    --lower-visibility-color: hsl(210, 30%, 45%);
+
+    --positive-sentiment-text-color: hsl(150, 80%, 55%);
+    --neutral-sentiment-text-color: hsl(60, 80%, 65%);
+    --negative-sentiment-text-color: hsl(350, 80%, 65%); 
+
+    --primary-color-rgb-triplet: 29, 115, 201; /* for controlling opacity, see drop down scrollbars. */
+    /* --accent-color: #2e8ce4; */
+    /* --background-color: rgb(242, 241, 240); */
+}
+
+/* contains header, nav, filter. Main scrolls under.  */
+.sticky-container {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background-color: var(--background-color);
+    backdrop-filter: none;
+}
+
+header {
+    display: flex;
+    /* text-indent: 2vw; */
+    justify-content: space-between;
+    align-items: center;
+    background-color: hsl(210, 20%, 15%); /* maybe not perma but great for dark mode */
+    /* padding: 15px; */
+    height: 80px;
+    padding: 0 3%;
+    width: 100%;
+}
+
+.header-options {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    gap: 20px;
+}
+
+header .button-container {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.clear-all-button {
+    padding: 2px 10px;
+}
+
+header span {
+    /* color: var(--accent-color) */
+    background-image: linear-gradient(to right, var(--primary-color) 30%, var(--accent-color));
+    background-clip: text;
+    color: transparent; /* allows background-image to act as text colour */
+}
+
+header .theme-icon-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 10px;
+    cursor: pointer;
+    scale: 0.6;
+}
+
+
+/* DARK - MaterialUI Brightness3 https://mui.com/material-ui/material-icons/?query=moon&selected=Brightness3
+   LIGHT - MaterialUI LightMode https://mui.com/material-ui/material-icons/?query=lightmo&selected=LightMode */
+header .theme-icon {
+    height: 100%;
+    transform: rotate(-20deg) scale(-1, 1); /* moon starts at a slight angle */
+    /* fill: var(--accent-text-color); */
+    fill: var(--primary-color);
+    transition: fill 0.3s ease;
+  }
+
+header .theme-icon:hover {
+    fill: var(--accent-color);
+}
+
+body.dark .theme-icon {
+    transform: rotate(0deg); /* Light mode icon (sun) should be upright */
+}
+
+
+
+
+h1 {
+    font-size: clamp(1.5rem, calc(1vw + 1rem), 4rem);
+    color: var(--primary-color);
+}
+
+h2, input, label {
+    font-size: 1.25rem;
+    font-weight: 400;
+    margin: 0;
+}
+
+p, p * {
+    margin: 0;
+    text-transform: none !important;
+}
+
+
+input::placeholder {
+    color: var(--tertiary-color);
+}
+
+.content {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+}
+
+.section-nav, .global-filter-container {
+    /* position: relative; */
+    display: flex;
+    /* align-items: center; */
+    /* flex-wrap: wrap; */
+    background-color: var(--surface-color);
+    border-radius: var(--defBorderRad);
+    transform: translateZ(0);
+
+}
+
+.section-nav {
+    margin: 20px auto;
+    width: clamp(350px, 35vw, 600px);
+    justify-content: center;
+    /* height: max-content; */
+}
+
+.global-filter-container {
+    position: relative;
+    justify-content: center;
+    max-width: 1500px;
+    width: 90%;
+    margin: 0 auto 20px auto;
+    max-height: var(--initialFilterContainerHeight, auto);
+    /* padding: 5px 0; */
+    z-index: 999; /* filters above all other content */
+}
+
+/* for the love of god don't mess with margins, padding. If it works leave it. Messing with it pushes around the global filter container and I can't cope. */
+.nav-item-container {
+    display: flex;
+    position: relative;
+    justify-content: space-between;
+    align-items: center;
+    height: 100%;
+    width: 100%;
+    margin-bottom: 2px;
+    gap: 20px;
+    padding: 0px 10px;
+    /* padding-right: 10px;
+    padding-left: 10px; */
+}
+
+.section-nav .nav-item, .filter-item {
+    position: relative;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    height: 100%;
+    padding: 5px 0;
+    white-space: nowrap;
+    transition: color 0.2s ease, background-color 0.2s ease;
+    user-select: none;
+    flex: 1;
+    display: flex;
+}
+
+.nav-item {
+    cursor: pointer;
+}
+
+.nav-item.active {
+    color: var(--accent-color);
+}
+
+.filter-item {
+    margin: 0 20px;
+}
+
+
+.nav-indicator, .stat-rotation-progress-bar {
+    /* justify-content: center; */
+    position: absolute;
+    bottom: 0;
+    height: 2px;
+    background-color: var(--accent-color);
+    border-radius: var(--defBorderRad);
+}
+
+
+/* for hover over nav-item effect */
+.nav-item::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 0%;
+    height: 2px;
+    background-color: var(--primary-color);
+    border-radius: var(--defBorderRad);
+    transition: width 0.3s ease, left 0.3s ease;
+    transform: translateX(-50%);
+}
+
+.nav-item:hover::after {
+    width: 30%;
+}
+
+
+
+/* CONTAINS ALL DROP DOWN ELEMENTS INCLUDING 'SELECT...' BOX. */
+.select-container {
+    position: relative;
+    z-index: 1;
+    border-radius: 7px;
+    overflow: hidden;
+    /* padding-top: 0.125rem;
+    padding-bottom: 0.125rem; */
+}
+
+.select-container.active {
+    /* vertical for now because can't get centering to work when resizing both. Set resize: both to see. */
+    resize: vertical;
+    display: block;
+    overflow: hidden;
+    box-shadow: 0 4px 4px -4px gray;
+    /* padding-top: 0.125rem; */
+    /* padding-bottom: 0.125rem; */
+}
+
+.drop-down-container.active {
+    box-shadow: 0 4px 4px -4px gray;
+}
+
+/* SELECT BOX - ACTIVATE DROP-DOWN, BORDER EFFECTS */
+.select-box {
+    position: relative;
+    width: 100%;
+    cursor: pointer;
+    display: flex;
+    /* transition: scale 0.3s ease; */
+    /* padding-top: 0.125rem; */
+    /* padding-bottom: 0.125rem; */
+}
+
+/* 
+.select-box:hover {
+    scale: 1.03;
+
+}
+.select-box.active {
+    scale: 1;
+} */
+
+
+.select-box input {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border: var(--defBorderWidth) solid var(--background-color);
+    border-radius: 7px;    
+    appearance: none;
+    /* padding-top: 0.125rem;
+    padding-bottom: 0.125rem; */
+    padding-left: var(--dropDownPadding);
+    /* padding-right: 20%; */
+    cursor: text;
+    z-index: 1;
+    background-color: var(--surface-color);
+    transition: border 0.3s ease, background-color 0.3s ease;
+    text-indent: var(--dropDownPadding);
+    outline-width: 0;
+    color: var(--accent-color);
+}
+
+
+.select-box:hover input {
+    border-color: var(--primary-color);
+    /* background-color: rgba(var(--primary-color-rgb-triplet), 0.07); */
+}
+
+/* expanding removes bottom border of select box, and ensures the border stays in line with that of the select-container */
+    .select-box.active input {
+        /* display: flex; */
+        transition: 0.1s ease;
+        border-color: var(--accent-color);
+        border-bottom-color: transparent;
+        border-bottom-right-radius: 0;
+        border-bottom-left-radius: 0;
+    }
+
+
+    /* to fill the annoying gaps made by transparent bottom border */
+    .select-box::after, .select-box::before {
+            content: "";
+            position: absolute;
+            opacity: 0;
+            bottom: 0;
+            z-index: 2;
+        }
+
+    /* to stop shifting border */
+    .select-box::after {
+            left: calc(var(--dropDownPadding) + var(--defBorderWidth));
+            width: 0;
+            border-bottom: var(--defBorderWidth) solid transparent;
+        }
+
+    /* Border under 'Select' text */
+    .select-box.active::after {
+            opacity: 1;
+            width: calc(100% - 2 * var(--dropDownPadding) - 2 * var(--defBorderWidth));
+            transition-delay: 0.05s;
+            transition: border-bottom-color 0.2s ease, width 0.4s ease;
+            border-bottom-color: rgba(211, 211, 211, 0.7);
+        }
+
+    .select-box.active:hover::after {
+        border-bottom-color: rgba(211, 211, 211, 1);
+    }
+
+        /* placeholder for gap fillers; setting radius to 0 above creates gaps */
+    .select-box::before {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 25%;
+            pointer-events: none;
+            border-right: var(--defBorderWidth) solid transparent;
+            border-left: var(--defBorderWidth) solid transparent;
+        }
+
+    .select-box.active::before {
+            opacity: 1;
+            border-right-color: var(--accent-color);
+            border-left-color: var(--accent-color);
+        }
+
+        
+/* Styling for Select box text */
+.select-overlay {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    font-size: 0.75rem;
+    /* padding-top: 0.1rem;
+    padding-bottom: 0.1rem; */
+    /* padding-left: 0.4rem; */
+    /* margin-left: 5px; */
+    align-content: center;
+    pointer-events: none;
+    color: transparent;
+    z-index: 2;
+}
+
+
+/* Styling for Select box rotating arrow */
+.arrow-icon-wrapper {
+    /* content: ""; */
+    position: absolute;
+    display: flex;
+    align-items: center;
+    opacity: 1;
+    top: 0;
+    right: 0;
+    padding-left: 22px; 
+    padding-right: 7px; 
+    height: 100%; /* as to ignore the border in selectOperator::after */
+    pointer-events: auto;
+    cursor: pointer;
+    z-index: 3;
+}
+
+/* bar to the left of arrow */
+.arrow-icon-wrapper:after {
+    content: "";
+    position: absolute;
+    left: 0;
+    width: var(--defBorderWidth); 
+    background-color: var(--background-color);
+    height: 65%;
+    transition: background-color 0.3s ease;
+}
+
+.select-box:hover .arrow-icon-wrapper:after {
+    background-color: var(--primary-color);
+}
+.select-box.active .arrow-icon-wrapper:after {
+    background-color: var(--accent-color);
+}
+
+
+/* MaterialUI ExpandMore https://mui.com/material-ui/material-icons/?query=play&selected=ExpandMore */
+.arrow {
+    content: "";
+    position: absolute;
+    /* margin-right: 10px; */
+    right: 3px; 
+    /* width: 16px; */
+    transition: transform 0.2s ease, fill 0.2s ease;
+    z-index: 4;
+    opacity: 0.8;
+    fill: var(--primary-text-color);
+}
+
+.select-box:hover .arrow {
+    fill: var(--accent-color)
+}
+
+.arrow.active {
+    transform: rotate(-180deg);
+    opacity: 1;
+    fill: var(--accent-color)
+}
+
+
+.drop-down-container {
+    transform-origin: top;
+    /* transition: max-height 0.3s ease-in-out, opacity 0.1s ease, transform 0.1s ease; */;
+    position: relative;
+    opacity: 0;
+    transform: scaleY(0);
+    /* max-height: 0; */
+    max-width: 0;
+    transition: transform 250ms cubic-bezier(0.5, 1.8, 0.3, 0.8);
+    will-change: transform, opacity, max-width;
+}
+
+
+.drop-down-container.active {
+    display: flex;
+    flex-direction: column;
+    opacity: 1;
+    transform: scaleY(1);
+
+    /* height: calc(100% - 29.2px);
+    max-height: calc(100% - 29.2px); */
+
+    min-height: 0;
+    max-width: 100%;
+    border: var(--defBorderWidth) solid var(--accent-color);
+    border-top-width: 0;
+    border-radius: 0 0 7px 7px;
+    background-color: var(--surface-color);
+
+    /* background-color: rgba(255, 255, 255, 1); */
+    /* backdrop-filter: blur(9px) saturate(200%); */
+}
+
+
+
+.drop-down-body {
+    display: none;
+    flex-direction: column;
+    overflow: auto;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    align-items: flex-start;
+    flex-grow: 1;
+    width: 100%;
+    position: relative;
+    /* to move scrollbar to right, set border...idk meh. */
+    border-left: var(--dropDownPadding) solid transparent;
+    border-right: var(--dropDownPadding) solid var(--surface-color);
+  }
+
+
+
+.drop-down-body.active {
+    display: block;
+}
+
+.drop-down-row-wrapper {
+    display: inline-flex;
+    /* width: max-content; */
+    flex-shrink: 0;
+    justify-content: flex-start;
+    min-width: max-content;
+    align-items: center;
+    position: relative;
+}
+
+/* for drop-down-row-wrappers inside date container (don't have checkboxes) */
+.drop-down-row-wrapper.block {
+    display: block;
+}
+
+.selectall-row-wrapper {
+    border-bottom: var(--defBorderWidth) solid rgba(211, 211, 211, 0.7);
+}
+
+.selection-row-wrapper {
+    text-transform: capitalize;
+}
+
+
+.drop-down-row.label label {
+    display: inline-flex;
+    padding-left: var(--dropDownPadding);
+    cursor: pointer;
+    border-radius: 7px;
+    /* font-weight: 400; */
+    white-space: nowrap;
+    flex-grow: 1; /* needed so hover extends to full width of label */
+    flex-shrink: 1;
+    max-width: 100%;
+    padding-right: 5px;
+    color: var(--primary-text-color);
+}
+
+.drop-down-row.label label:hover {
+    background-color: var(--primary-color);
+    cursor: pointer;
+    color: var(--accent-text-color);
+}
+
+
+.selected {
+    background-color: var(--accent-color) !important;
+    cursor: pointer;
+    color: var(--accent-text-color) !important;
+}
+
+.inner-drop-down .drop-down-row label:not(.selected):hover {
+    background-color: var(--primary-color);
+}
+
+.drop-down-row.checkbox input {
+    cursor: pointer;
+    height: 1rem;
+    width: 1rem;
+    margin-right: 1px;
+}
+
+.drop-down-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    height: 25px;
+    line-height: 1.75rem;
+}
+
+.drop-down-row.label {
+    display: flex;
+    flex-grow: 1;
+}
+
+.drop-down-row.checkbox {
+    position: sticky;
+    right: 0;
+    padding-left: var(--dropDownPadding);
+    /* margin-right: 5px; */
+    width: 1.25rem;
+    height: 1.75rem;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    background-color: var(--surface-color);
+    /* background-color: blue !important; */
+}
+
+
+.drop-down-items {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    flex-grow: 1;
+    min-width: max-content;
+}
+
+
+.drop-down-body::-webkit-scrollbar {
+    width: 8px; /* vertical scrollbar */
+    height: 8px; /* horizontal scrollbar */
+    }
+
+.drop-down-body::-webkit-scrollbar-track {
+    background-color: rgba(var(--primary-color-rgb-triplet), 0.1);
+    border-radius: 7px;
+    }
+
+.drop-down-body::-webkit-scrollbar-thumb {
+    background-color: rgba(var(--primary-color-rgb-triplet), 0.5);
+    cursor: pointer;
+    border-radius: 7px;
+    }
+
+.drop-down-body::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(var(--primary-color-rgb-triplet), 0.75);
+    border-radius: 7px;
+    }
+
+.drop-down-body::-webkit-scrollbar-thumb:active {
+    background-color: var(--primary-color);
+    }
+
+.drop-down-body::-webkit-scrollbar-corner {
+    background-color: var(--surface-color);
+    }
+   
+
+.button-container {
+    display: none;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    bottom: 0;
+    padding: 3px var(--dropDownPadding);
+    border-radius: 7px;
+    text-align: center;
+    margin-top: 5px;
+}   
+
+.button-container.active {
+    display: flex
+}
+
+
+.ripple-btn {
+    display: block;
+    height: 1.75rem;
+    /* background-color: var(--surface-color); */
+    background-color: transparent;
+    cursor: pointer;
+    /* border: 1px solid var(--primary-color); */
+    border: none;
+    border-radius: var(--defBorderRad);
+    font-size: 1.25rem;
+    color: var(--accent-color);
+    text-align: center;
+    position: relative;
+    z-index: 0;
+    transition: all 0.2s ease;
+    overflow: hidden;
+    will-change: transform;
+}
+
+.ripple-btn:hover {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: var(--surface-color);
+}
+
+.ripple-btn:active {
+    color: var(--surface-color);
+    z-index: 1;
+}
+
+/* ripple effect */
+.ripple-btn::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: radial-gradient(circle, var(--accent-color), var(--accent-color));
+    border: var(--defBorderWidth) solid transparent;
+    border-radius: var(--defBorderRad);
+    transform: translate(-50%, -50%); /* Center ripple */
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: -1;
+  }
+
+
+.ripple-fade-out:hover {
+    background-color: var(--accent-color) !important;
+}
+  
+/* expand ripple effect when active */
+.ripple-active::before {
+    width: 100%;
+    height: 100%;
+    opacity: 1;
+    transition: width 0.2s ease, height 0.2s ease;
+  }
+
+/* non-persistent drop down buttons have shorter delay so transition visible before drop down fully closees */
+.drop-down-container .ripple-active:not(.persistent-btn)::before {
+    transition: width 0.1s ease, height 0.1s ease;
+}
+
+  
+/* ripple-active (click being held after clicking button) and not hovering fades out background.  */
+.ripple-btn.ripple-active:not(:hover)::before {
+    opacity: 0;
+}
+
+.ripple-btn.ripple-active:hover::before {
+    opacity: 1;
+}
+
+.ripple-btn.ripple-active:active {
+    color: var(--primary-color);
+}
+
+.ripple-btn.ripple-active:active:hover {
+    color: var(--surface-color);
+}
+
+
+.ok-button, .cancel-button {
+    min-width: 20px;
+}
+
+.persistent-btn {
+    font-size: 1rem;
+}
+
+.persistent-btn.persistent-active {
+    background-color: var(--accent-color);
+    /* color: var(--surface-color); */
+    transition: background-color 0.3s ease !important;
+}
+
+.persistent-btn.persistent-active:not(:hover) {
+    color: var(--surface-color);
+}
+
+@media (max-width: 768px) {
+    #main-slider {
+        transition: transform 0s !important;
+    }
+
+    /* Stack sections vertically on mobile */
+    .main-content {
+        grid-template-columns: 1fr !important;
+        grid-template-rows: repeat(3, 1fr);
+        gap: 10px;
+        /* margin: 10px; */
+
+    }
+
+    main section {
+        min-height: 70vh;
+        width: 100%;        
+    }
+
+    /* removes default 'tap' effect on inputs boxes */
+    input:focus {
+        outline: none;
+    }
+
+    /* turn of nav item hover effect */
+    .nav-item::after {
+        display: none;
+    }
+}
+
+#main-slider {
+    display: flex;
+    width: 100vw;
+    position: relative;
+    transition: transform 0.5s cubic-bezier(0.77, 0, 0.175, 1);  /* maybe match duration with the duration on nav-indicator (in JS), feels ok for now though. */
+    will-change: transform;
+  }
+  
+  /* allows the pages (processing, dash, AQA) to overflow (so that they're visible on scroll/slide) but hides scrollbar. */
+    html {
+        /* overflow: scroll; */
+        overflow-x: hidden;
+    }
+
+
+    .active-processing-pill {
+        position: fixed;
+        bottom: 5%;
+        left: 50%;
+        transform: translateX(-50%) translateY(100%);
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 16px;
+        color: var(--accent-text-color);
+        background-color: var(--primary-color);
+        border-radius: var(--defBorderRad);
+        user-select: none;
+        opacity: 0;
+        transition: transform 0.3s ease, opacity 0.3s ease, background-color 0.3s ease;
+        will-change: transform;
+    }
+    
+    .active-processing-pill.active {
+        transform: translateX(-50%) translateY(0%);
+        opacity: 1;
+        cursor: pointer;
+    }
+
+    .active-processing-pill.active.clicked {
+        transform: translateX(-50%) translateY(0%) scale(0.95);
+    }
+    
+
+  .main-page {
+    flex: 0 0 100vw;
+    display: flex;
+    justify-content: center;
+  }
+  
+  .main-content {
+    width: 90%;
+    display: grid;
+    margin: 10px 0 10dvh 0;
+    max-width: 1550px;
+    min-height: 675px;
+    max-width: 1550px;
+  }
+
+  #main-processing .main-content {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-gap: 45px;
+  }
+
+  #main-dashboard .main-content {
+    grid-template-columns: 1fr 6fr 1.5fr;
+    grid-gap: 30px;
+  }
+
+
+
+main section {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    background-color: var(--surface-color);
+    border-radius: var(--defBorderRad);
+    /* flex-grow: 1; */
+    height: 100%;
+    /* min-width: 200px; */
+    /* min val for smaller screens */
+    padding: min(var(--defContentPadding), 8%);
+    /* transform for hover, opacity and filter for disabled */
+    transition: transform 0.3s cubic-bezier(0.455, 0.030, 0.515, 0.955), opacity 0.3s ease, filter 0.3s ease !important; 
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-font-smoothing: subpixel-antialiased;
+}
+
+main section:hover {
+    transform: scale(1.02);
+    /* z-index: 9999999999999; lol... but so tooltips that reach outside of the section appear above all. */
+}
+
+/* disables section when filtering by a filter that isn't applicable to the section. */
+.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+    filter: saturate(5%);
+}
+
+.begin-processing-container {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: var(--defContentPadding);
+    width: calc(100% - var(--defContentPadding) * 2);
+    height: 7%; /* Default height */
+    margin-bottom: 10px;
+    background-color: var(--primary-color);
+    border-radius: 20px;
+    align-items: center;
+    color: var(--accent-text-color);
+    text-transform: capitalize;
+    transition: height 0.3s cubic-bezier(0.455, 0.030, 0.515, 0.955);
+    /* transition: height 0.3s ease-in-out; */
+    overflow: hidden;
+    will-change: transform, opacity;
+    z-index: 1;
+}
+
+/* height set in js updateProcessingContainerHeight. Necessary to set there so it always expands to cover the first info card on hover.*/
+.begin-processing-container:hover,
+.begin-processing-container.active {
+    /* height: 16%; */
+    z-index: 10; 
+}
+
+.begin-processing-container:not(:hover) {
+    transition-delay: 0.1s;
+}
+
+.begin-processing-header {
+    position: absolute;
+    top: 24px;
+    transform: translateY(-50%);
+    left: 0;
+    width: 100%;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* 'blobs' the info card into the container, after the info card *outside* of the container has shrunk (.first-info-card). */
+.first-info-card-processing {
+    transform-origin: center;
+    transform: scale(0.6);
+    opacity: 0;
+    transition: transform 0.4s cubic-bezier(0.65, -0.3, 0.4, 1.6), opacity 0.4s cubic-bezier(0.65, -0.3, 0.4, 1.6), color 0.5s ease-in, background-color 0.5s ease-in 0s !important;
+    width: 100%;
+    padding: 0 !important;
+    margin-bottom: 5px;
+}
+
+.begin-processing-container:hover .first-info-card-processing,
+.begin-processing-container.active .first-info-card-processing {
+    transform: scale(1);
+    opacity: 1;
+    background-color: transparent !important;
+    transition-delay: 0.15s;
+}
+
+.begin-processing-container:hover .first-info-card-processing .info-subheading,
+.begin-processing-container.active .first-info-card-processing .info-subheading {
+    color: var(--accent-text-color);
+}
+
+
+
+.begin-processing-container:hover .first-info-card-processing .info-stat,
+.begin-processing-container.active .first-info-card-processing .info-stat {
+    color: hsl(45, 90%, 55%);
+    font-weight: 500;
+    /* color: var(--tertiary-color); */
+}
+
+
+
+/* tab to indicate hoverable */
+.begin-processing-header::before{
+    content: "";
+    position: absolute;
+    bottom: 4px;
+    height: 2px;
+    width: 10%;
+    left: 45%;
+    background-color: var(--accent-text-color);
+    opacity: 1;
+    transition: opacity 0.4s ease;
+    border-radius: var(--defBorderRad);
+}
+.begin-processing-container:hover .begin-processing-header::before,
+.begin-processing-container.active .begin-processing-header::before {
+    opacity: 0;
+}
+
+
+.begin-processing-header svg {
+    cursor: pointer;
+}
+
+.process-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    padding: 10px 20px;
+    min-width: 100%;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+    color: var(--accent-text-color);
+    will-change: transform, opacity;
+}
+
+.process-progress div {
+    border-radius: 7px;
+}
+
+.begin-processing-container:hover .process-progress,
+.begin-processing-container.active .process-progress {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+
+.progress-bar-track {
+    margin-top: 5px;
+    position: relative;
+    width: 100%;
+    height: 8px;
+    background-color: var(--surface-color);
+}
+
+
+.progress-bar-indicator {
+    width: 20%;
+    height: 100%;
+    background-color: var(--tertiary-color);
+  }
+
+
+/* MaterialUI PlayCircle https://mui.com/material-ui/material-icons/?query=play&selected=PlayCircleFilledWhite */
+/* MaterialUI StopCircle https://mui.com/material-ui/material-icons/?query=stop&selected=StopCircle */
+.processing-start-stop-icon {
+    position: absolute;
+    right: 30px;
+    transform : translate(50%, 0);
+    height: 75%;
+    aspect-ratio: 1/1;
+    border-radius: 100%;
+    transition: opacity 0.3s; /* for disabled ones */
+}
+
+.icon-path {
+    transform-origin: center;
+    transition: transform 0.2s ease-out;
+}
+
+.rotated {
+    transform: rotate(90deg);
+}
+
+.stat-info-wrapper {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 20px 20px;
+    height: 55%;
+    transition: filter 0.2s ease;
+    /* will-change: transform, opacity; */
+}
+
+/* .stat-info-wrapper:hover {
+    filter: hue-rotate(20deg);
+    filter: saturate(150%);
+} */
+
+.stat-progress-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-color);
+    /* background-color: var(--background-color); */
+    border-radius: var(--defBorderRad);
+    /* width: 20%; */
+    margin: 0 37%;
+    padding: 3px;
+}
+
+.stat-refresh-status {
+    /* position: relative; */
+    display: flex;
+    align-items: center;
+    gap: 3px; /* between icon and status text */
+    position: absolute;
+    top: 18px;
+    right: 0;
+    margin-right: 32px;
+    cursor: pointer;
+
+  }
+  
+
+  .stat-rotation-time-since-icon, .stat-rotation-time-since-text {
+    opacity: 0.5;
+    transition: opacity 0.3s ease;
+    will-change: opacity;
+  }
+
+  .stat-rotation-time-since-icon {
+    height: 1rem;
+    aspect-ratio: 1 / 1;
+    fill: var(--tertiary-color);
+    will-change: transform;
+  }
+
+  .stat-rotation-time-since-icon.loading {
+    animation: loading 1.2s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    transform-origin: center;
+  }
+
+  @keyframes loading {
+    from { transform: rotate(0turn); }
+    to { transform: rotate(1turn); } 
+  }
+   
+  .stat-rotation-time-since-text {
+    font-size: 0.875rem;
+    color: var(--tertiary-color);
+  }
+
+  .tooltip {
+    position: absolute;
+    z-index: 999;
+    background-color: var(--primary-color);
+    color: var(--accent-text-color);
+    padding: 4px 8px;
+    border-radius: var(--defBorderRad);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    transform: translateX(-50%);
+  }
+  
+
+  .stat-refresh-status:hover .stat-rotation-time-since-text,
+  .stat-refresh-status:hover .stat-rotation-time-since-icon {
+    opacity: 1;
+  }
+
+
+.info-card-bound {
+    font-size: 14px;
+}
+
+.sentiment-lower-bound-text {
+    color: var(--negative-sentiment-text-color);
+}
+
+.sentiment-upper-bound-text {
+    color: var(--positive-sentiment-text-color);
+}
+
+.sentiment-zero-bound-text {
+    color: var(--neutral-sentiment-text-color);
+}
+
+.stat-rotation-progress-text {
+    color: var(--tertiary-color);
+    font-size: 1rem;
+    text-wrap: nowrap;
+    text-align: center;
+    /* position: relative; */
+}
+
+.rotation-index, .rotation-category-name {
+    display: block;
+    font-size: 0.875rem;
+    line-height: 1rem;
+    transition: opacity 0.5s ease;
+
+}
+
+.rotation-index:not(.show) {
+    opacity: 0;
+}
+
+.rotation-index.show {
+    opacity: 1;
+
+}
+
+
+
+.pause-icon {
+    opacity: 0;
+    top: 12.5%;
+    transition: opacity 0.5s ease;
+    display: inline-block; 
+}
+
+.stat-rotation-progress-text .pause-icon {
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  transition: opacity 0.5s ease
+}
+
+.stat-rotation-progress-text .pause-icon.show {
+  opacity: 1;
+}
+
+
+.stat-rotation-progress-bar {
+    left: 0;
+    height: 1px;
+    background-color: var(--primary-color);
+    will-change: transform;
+}
+
+
+.info-section.inner {
+    position: relative;
+    max-height: min-content;
+    margin: calc(7% + var(--defContentPadding) + 5px) 0 5px 0; /* postitioned beneath processing container which has height 8% and padding above it. */
+    /* margin-top: 10px; */
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+}
+
+.info-card.filter-info {
+    padding: 10px 20px;
+    background-color: var(--background-color2);
+    transform-origin: top;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.begin-processing-container:hover ~ .info-section .first-info-card,
+.begin-processing-container.active ~ .info-section .first-info-card { 
+    transform: scaleY(0);
+    opacity: 0;
+}
+
+.begin-processing-container:not(:hover) ~ .info-section .first-info-card { 
+    /* slightly longer than the delay of the other .begin-processing-container:not(:hover) */
+    transition-delay: 0.2s; 
+}
+
+.info-card.filter-info .info-subheading {
+    position: relative;
+    text-transform: capitalize;
+}
+
+.info-card.filter-info .info-stat {
+    display: inline-block;
+    font-size: 1rem;
+    padding: 0;
+}
+
+
+.info-card.filter-info .sentiment-result {
+    color: var(--primary-text-color);
+    font-size: 14px;
+  }
+
+
+.info-card.filter-info .positive-sentiment-text {
+    color: var(--positive-sentiment-text-color);
+}
+
+.info-card.filter-info .neutral-sentiment-text {
+    color: var(--neutral-sentiment-text-color);
+
+}
+
+.info-card.filter-info .negative-sentiment-text {
+    color: var(--negative-sentiment-text-color);
+}
+
+
+.info-section {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr; 
+    grid-gap: 10px;
+    margin: auto;
+    /* padding: 20px; */
+    min-height: 0;
+    min-width: 0;
+    background-color: transparent !important /* makes sure can't see square edges when greyed out (when min date filter applying) */;
+}
+
+#main-dashboard .info-section {
+    grid-template-columns: 1fr; 
+}
+
+.dashboard-info .info-section {
+    grid-auto-rows: 1fr;
+}
+
+.dashboard-nav {
+    will-change: transform;
+    padding: 20px 5px;
+}
+
+.dashboard-nav .info-section {
+    grid-template-rows: none;
+    grid-auto-rows: 25px;
+}
+
+
+.dashboard-nav .section-heading {
+    padding: 8px 0;
+    text-align: center;
+    color: var(--primary-text-color);
+    user-select: none;
+}
+
+
+.dashboard-graph .info-section {
+    display: grid;
+    /* grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: 1fr 1fr; */
+    gap: 10px;
+    position: relative;
+  }
+  
+  .dashboard-graph .info-card {
+    transition: all 0.3s ease-in-out;
+    /* cursor: pointer; */
+    padding: 10px;
+    position: absolute !important
+  }
+
+  .dashboard-graph .graph-expand-icon path {
+    transition: fill 0.3s ease
+  }
+
+  .dashboard-graph .graph-expand-icon:hover path {
+    fill: var(--tertiary-color);
+  }
+  
+    /* match timing with shrinking in loadChartsForPage() */
+  .dashboard-graph .info-card.shrunk {
+    transform: scale(0);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  
+  .dashboard-graph .info-card:not(.shrunk) {
+    transform: scale(1);
+  }
+
+  .dashboard-graph .info-card.hidden {
+    visibility: hidden;
+  }
+  
+
+.dot {
+    font-weight: 500;
+}
+
+.info-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--background-color);
+    width: 100%;
+    height: 100%;
+    border-radius: 20px;
+    padding: 8%;
+    max-height: 100%;
+    /* aspect-ratio: 1; */
+    overflow: hidden;
+    min-width: 0;
+    color: var(--primary-text-color);
+    will-change: filter;
+    transition: filter 0.3s ease
+}
+
+.stat-info-wrapper:hover .info-card {
+    filter: saturate(150%);
+}
+
+.info-card, .info-subheading {
+    font-size: clamp(0.75rem, 1vw, 1rem);}
+
+.info-card .info-subheading {
+    display: block;
+    color: var(--tertiary-color);
+    text-transform: uppercase;
+    transition: opacity 0.3s ease-in;
+}
+
+.info-card .info-stat {
+    display: block;
+    /* position: absolute;
+    bottom: 5px; */
+    font-size: clamp(1.5rem, 2vw, 2rem);
+    color: var(--accent-color);
+    padding-right: 20px;
+    text-wrap: nowrap;
+}  
+
+
+
+.info-stat .sentiment-info-stat-is-bound {
+    display: inline; 
+    position: relative; 
+  }
+  
+   /* if the stat is a bound (i.e. for sentiment, bounds are -1 and 1), gets underline styling for clarity. */
+  .info-stat .sentiment-info-stat-is-bound::after {
+    content: ''; 
+    position: absolute;
+    bottom: 0px;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background-color: var(--tertiary-color);
+    border-radius: 2px;
+  }
+  
+
+.info-stat {
+    transition: opacity 0.3s ease-in;
+    opacity: 1;
+  }
+  
+  .fade-out {
+    opacity: 0;
+  }
+  
+  .fade-in {
+    opacity: 1;
+  }
+
+
+/* 
+    DATE PICKER 
+*/
+
+/* hide default month and year select containers */
+.flatpickr-monthDropdown-months, .numInputWrapper {
+    display: none !important;
+    /* margin-bottom: 20px; */
+}
+
+.flatpickr-month {
+    display: none;
+}
+
+.flatpickr-current-month {
+    padding: 0 !important;
+}
+
+
+
+.inner-drop-down .select-container {
+    height: max-content;
+    padding-bottom: 0;
+    resize: none;
+    /* display: none; */
+    margin: 0
+}
+
+.inner-drop-down .select-box input,
+.inner-drop-down .select-box::before,
+.inner-drop-down .drop-down-container label {
+    border: transparent;
+    font-size: 1rem;
+    line-height: 1.5rem;
+}
+
+.inner-drop-down .drop-down-container {
+    /* padding-bottom: 5px; */
+    border: transparent;
+}
+
+
+
+.inner-drop-down .select-container input {
+    cursor: pointer;
+}
+
+.inner-drop-down .select-container input::placeholder {
+    transition: color 0.1s ease;
+    color: var(--primary-color);
+}
+
+
+
+
+.inner-drop-down .select-container input:hover::placeholder,
+.inner-drop-down .select-container.active input::placeholder {
+    color: var(--accent-color);
+}
+
+.inner-drop-down .drop-down-body {
+    overflow: hidden;
+    padding-bottom: 1px;
+    border: 0;
+}
+
+
+
+/* override default month left / month right arrow behaviour to always show arrow even if can't move left/right (which is when e.g. the prev month 
+is before the min-date. Instead decrease opacity. */
+    .flatpickr-months .flatpickr-prev-month.flatpickr-disabled,
+    .flatpickr-months .flatpickr-next-month.flatpickr-disabled {
+        opacity: 0.4;
+        display: block !important;
+        cursor: default !important;
+    }
+
+    .flatpickr-months .flatpickr-prev-month *,
+    .flatpickr-months .flatpickr-next-month * {
+        fill: var(--primary-color) !important;
+        stroke: var(--primary-color);
+        stroke-width: 1;
+        transition: stroke 0.1s ease, fill 0.1s ease !important;
+    }
+
+    .flatpickr-months .flatpickr-prev-month:hover *,
+    .flatpickr-months .flatpickr-next-month:hover *{
+        fill: var(--accent-color) !important;
+        stroke: var(--accent-color);
+    }
+
+
+
+#select-container-date-range {
+    /* make date drop down static/non-resizable, make sure content fits inside. */
+    position: relative;
+    z-index: 1;
+    display: block;
+    /* min-height: 100%; */
+    /* height: auto; */
+    overflow: visible; 
+    resize: none;
+    /* padding-bottom: 0; */
+}
+
+
+.inner-drop-down {
+    position: relative; 
+    /* top: 0;  */
+    /* background: var(--surface-color); */
+    /* background: transparent; */
+    z-index: 2; 
+}
+
+.inner-drop-down .select-box * {
+    background: transparent;
+}
+
+
+
+.inner-drop-down input {
+    margin: 0;
+    /* padding-left: 6.4px; */
+    padding-bottom: 0;
+    padding-right: 0;
+}
+
+/* align left/right arrows, month and year dropdowns vertically. */
+    .flatpickr-prev-month, .flatpickr-next-month, .inner-drop-down .select-container, .inner-drop-down input {
+        padding-top: 0 !important;
+    }
+
+    .flatpickr-prev-month, .flatpickr-next-month, .inner-drop-down .select-container {
+        margin-top: 10px;
+    }
+
+/* .flatpickr-monthDropdown-months-custom {
+    left: 30px;
+    width: 90px;
+}
+
+.flatpickr-yearDropdown-years-custom {
+    left: 110px;
+    width: 55px;
+} */
+
+
+.date-select-wrapper {
+    display: inline-flex;
+    flex-direction: row;
+    /* align-items: flex-start; */
+    width: 100%;
+    padding: 0 20px;
+    /* justify-content: flex-end;   */
+    height: 30px;
+    overflow: visible;
+}
+
+
+.flatpickr-monthDropdown-months-custom input {
+    text-align: right !important;
+    padding: 0;
+    /* text-align: center !important; */
+    justify-content: flex-end;
+    margin: 0 10px;
+}
+
+.flatpickr-monthDropdown-months-custom label {
+    justify-content: flex-end !important;  
+}
+
+.flatpickr-yearDropdown-years-custom input {
+    text-align: left !important;
+    margin-right: 10px; 
+    justify-content: flex-start;  
+}
+
+
+/* allows month / year drop downs to stay on top */
+#drop-down-body-date {
+    overflow: visible;
+}
+
+/* override default properties */
+.flatpickr-calendar {
+    position: static !important;
+    top: auto !important;       
+    left: auto !important;     
+    width: 100% !important;
+    max-width: 100%;     
+    min-width: auto;
+    height: 100%;        
+    max-height: 100%;
+    background: none !important;
+    box-shadow: none !important;
+}
+
+
+
+/* compress calendar inside drop down, align days. */
+    .flatpickr-innerContainer {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+        height: 100%;
+        /* margin-top: 20px; */
+    }
+
+    .flatpickr-weekday {
+        color: var(--primary-text-color) !important;
+        font-weight: 300 !important;
+    }
+
+
+    .flatpickr-days {
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    .dayContainer {
+        min-width: 100% !important;
+    }
+
+    .flatpickr-day {
+        display: flex !important;
+        aspect-ratio: 1/1; 
+        height: 100% !important;
+        max-width: 100% !important;
+        align-items: center !important;
+        text-align: center;
+        color: var(--tertiary-color) !important;
+    }
+
+    .flatpickr-day:hover:not(.inRange):not(.endRange):not(.startRange):not(.flatpickr-day.flatpickr-disabled) {
+        background-color: var(--primary-color) !important;
+        color: var(--accent-text-color) !important;
+        border-color: var(--primary-color) !important;
+    }
+
+    .flatpickr-day.prevMonthDay,
+    .flatpickr-day.nextMonthDay {
+        color: var(--lower-visibility-color) !important;
+        /* opacity: 0.6; */
+    }
+
+
+    .flatpickr-day.prevMonthDay.startRange,
+    .flatpickr-day.nextMonthDay.startRange,
+    .flatpickr-day.prevMonthDay.endRange,
+    .flatpickr-day.nextMonthDay.endRange {
+        color: white !important;
+        /* opacity: 0.6; */
+    }
+
+    /* start and end dates have primary color */
+    .flatpickr-day.startRange,
+    .flatpickr-day.endRange {
+        position: relative;
+        background-color: var(--accent-color) !important;
+        border-color: var(--accent-color) !important;
+        color: var(--accent-text-color) !important;
+        border-radius: 32px !important;
+        border: none
+    }
+
+    /* to visually connect each start/end date with the day after/before it. */
+    .flatpickr-day.startRange::before, .flatpickr-day.endRange::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 50%;
+        width: 50%;
+        height: 100% !important;
+        z-index: -1 !important;
+    }
+
+
+    .flatpickr-day.startRange::before {
+        left: 50%;
+        transition: width 0.5s ease;
+    }
+
+    .flatpickr-day.endRange::before {
+        left: 0;
+    }
+
+
+
+    /* Do not apply pseudo element 'connectors' if startRange is 'focused' (clicked once) and no other days are hovered over,
+    or startRange is the only day 'selected' (clicked twice). */
+    .flatpickr-day.startRange.selected:focus:not(:has(+ .inRange))::before,
+    .flatpickr-day.startRange.endRange:before {
+        background-color: transparent !important; 
+    }
+
+
+    /* Styles for startRange when endRange comes directly after it */
+    .flatpickr-day.startRange:has(+ .endRange){
+        border-radius: 50px 0 0 50px !important;
+    }
+
+    /* Styles for endRange when startRange comes directly before it */
+    .flatpickr-day.startRange + .endRange {
+        border-radius: 0 50px 50px 0  !important;
+    }
+
+
+    /* override default connectors for inRange */
+    .flatpickr-day.inRange {
+        background-color: var(--background-color) !important;
+        border-color: var(--background-color) !important;
+        -webkit-box-shadow: -5px 0 0 var(--background-color), 5px 0 0 var(--background-color) !important;
+        box-shadow: -5px 0 0 var(--background-color), 5px 0 0 var(--background-color) !important;
+    }
+/* 
+    body.dark .flatpickr-day.inRange {
+        background-color: var(--tertiary-color) !important;
+        border-color: var(--tertiary-color) !important;
+        -webkit-box-shadow: -5px 0 0 var(--tertiary-color), 5px 0 0 var(--tertiary-color);
+        box-shadow: -5px 0 0 var(--tertiary-color), 5px 0 0 var(--tertiary-color);
+        color: var(--lower-visibility-color) !important;
+    }
+
+    .dark .flatpickr-day.startRange::before, .dark .flatpickr-day.endRange::before {
+        background-color: var(--tertiary-color) !important;
+    } */
+    
+    /* connectors - same col as inRange background. */
+    .flatpickr-day.startRange::before, .flatpickr-day.endRange::before {
+        background-color: var(--background-color) !important;
+    }
+
+
+
+    /* override default connectors between start/endRange and inRange */
+    .flatpickr-day.selected.startRange + .endRange:not(:nth-child(7n+1)),
+    .flatpickr-day.startRange.startRange + .endRange:not(:nth-child(7n+1)),
+    .flatpickr-day.endRange.startRange + .endRange:not(:nth-child(7n+1)),
+    .flatpickr-day.startRange + .inRange,
+    .flatpickr-day.endRange + .inRange,
+    .flatpickr-day.inRange + .endRange,
+    .flatpickr-day.inRange + .startRange {
+        box-shadow: none !important
+    } 
+
+
+.flatpickr-day.prevMonthDay, .flatpickr-day.nextMonthDay {
+    color: var(--lower-visibility-color) !important;
+    /* opacity: 0.6; */
+}
+
+
+.flatpickr-day.flatpickr-disabled {
+    color: var(--primary-text-color) !important;
+    opacity: 0.15;
+}
+
+/* removes the next month's days from current month calendar. */
+.nextMonthDay {
+    &:nth-last-child(-n+7) {
+        visibility: hidden;
+    }
+    }
+
+#date-range-submit-cancel-container {
+    padding-bottom: 8px;
+}
+
+
+

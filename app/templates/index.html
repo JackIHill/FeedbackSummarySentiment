@@ -1,0 +1,560 @@
+
+{% extends 'base.html' %}
+
+{% block head %}
+<title>HDI FeedbackHUB</title>
+{% endblock %}
+
+{% block body %}
+<div id="global-tooltip" class="tooltip"></div>
+
+<div class="content">
+  <header>
+    <h1>Feedback<span>HUB</span></h1>
+    
+    <div class="header-options">
+      <div id="clear-all-button-container" class="button-container active ">
+        <button type="submit" class="ripple-btn clear-all-button">Clear Filters</button>
+      </div>
+  
+      <div class="theme-icon-wrapper" onclick="dark()">
+        <svg class="theme-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path class="icon-path" d="M9 2c-1.05 0-2.05.16-3 .46 4.06 1.27 7 5.06 7 9.54s-2.94 8.27-7 9.54c.95.3 1.95.46 3 .46 5.52 0 10-4.48 10-10S14.52 2 9 2"/>
+        </svg>
+      </div>
+
+    </div>
+
+      
+    
+  </header>
+  <div class="sticky-container">
+
+
+    <nav class="section-nav">
+      <div class="nav-item-container"> 
+        <div class="nav-item nav-process" data-target="#processing" onclick="goToPage(0); showActiveProcessingPill(false)"><h2>Process</h2></div>
+        <div class="nav-item nav-dash" data-target="#dashboard" onclick="goToPage(1); showActiveProcessingPill(true)"><h2>Dashboard</h2></div>
+        <div class="nav-item nav-aqa" data-target="#aqa" onclick="goToPage(2); showActiveProcessingPill(true)"><h2>AQA</h2></div>
+        <span class="nav-indicator"></span>
+      </div>
+    </nav>
+
+    <div class="global-filter-container">
+        <form id="operator-form" method="post" class="form">
+          <div id="select-container-operator" class="select-container filter-item multiselect">
+            <div id="selectOperator" class="select-box"  onclick="toggleDropdown(true, event)">
+              <input type="text" id="operatorInput" class="select-text-input" placeholder="Select Operators" autocomplete="off" spellcheck="false" oninput="filterSelections(event)"/>
+              <div id="select-overlay" class="select-overlay"> <!-- Select Operators -->
+                <div class="arrow-icon-wrapper">
+                  <svg class="arrow" width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path class="icon-path" d="M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+  
+            <div id="drop-down-operator" class="drop-down-container">
+              <div id="drop-down-body" class="drop-down-body">
+                <div class="drop-down-items">
+                  <div class="drop-down-row-wrapper selectall-row-wrapper">
+                    <div class="drop-down-row label selectall-label">
+                      <label for="selectall-operator-checkbox">
+                          <span class="checkbox-label-text">Select All</span>
+                      </label>
+                    </div>
+                    <div class="drop-down-row checkbox checkbox_selectall">
+                      <input type="checkbox" id="selectall-operator-checkbox" name="Select All" value="Select All" class="checkbox-input"
+                      {% if selected_operators|length == existing_operators|length %} checked {% endif %}
+                      />
+                    </div>
+                  </div>
+  
+                  {% for operator in existing_operators %}
+                  {% set selected_operator_names = selected_operators | map(attribute='OperatorName') | list %}
+
+                  <div class="drop-down-row-wrapper selection-row-wrapper">
+                      <div id="label_{{ loop.index }}" class="drop-down-row label">
+                          <label for="operator_checkbox_{{ loop.index }}">
+                              <span id="checkbox-label-text" class="checkbox-label-text">{{ operator.OperatorName }}</span>
+                          </label>
+                      </div>
+                  
+                      <div class="drop-down-row checkbox checkbox_{{ loop.index }}">
+                          <input type="checkbox" id="operator_checkbox_{{ loop.index }}" name="selection-operator" value="{{ operator.OperatorName }}" class="checkbox-input"
+                          {% if operator.OperatorName in selected_operator_names %} checked {% endif %}
+                          />
+                      </div>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+  
+
+              <div id="operator-button-container" class="button-container">
+                <button type="submit" class="ripple-btn ok-button" style="float: left;" onclick="toggleDropdown(false, event)">Apply</button>
+                <button type="button" class="ripple-btn cancel-button" style="float: right;" onclick="toggleDropdown(false, event);">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </form>
+
+        <form id="daterange-form" method="post" class="form">
+          <div id="select-container-date-range" class="select-container filter-item" >
+            <div id="selectDateRange" class="select-box" onclick="toggleDropdown(true, event)">
+              <input type="text" id="datepicker" class="select-text-input readonly" placeholder="Select Date Range" autocomplete="off" spellcheck="false"/>
+              <div id="select-overlay" class="select-overlay">
+                <div class="arrow-icon-wrapper">
+                  <svg class="arrow" width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path class="icon-path" d="M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+  
+            <div id="drop-down-date-range" class="drop-down-container">
+              <div id="drop-down-body-date" class="drop-down-body"></div>
+              
+              <div id="date-range-preselect-container" class="button-container">
+                <button type="button" id="1-month" class="ripple-btn persistent-btn dates" style="float: left";>1M</button>
+                <button type="button" id="3-months" class="ripple-btn persistent-btn dates" style="float: left";>3M</button>
+                <button type="button" id="6-months" class="ripple-btn persistent-btn dates" style="float: left";>6M</button>
+                <button type="button" id="12-months" class="ripple-btn persistent-btn dates" style="float: left";>1Y</button>
+                <button type="button" id="default-months" class="ripple-btn persistent-btn dates" style="float: left";>MAX</button>
+              </div>
+
+              <div id="date-range-submit-cancel-container" class="button-container">
+                <button type="submit" class="ripple-btn ok-button" style="float: left;" onclick="toggleDropdown(false, event)">Apply</button>
+                <button type="button" class="ripple-btn cancel-button" style="float: right;" onclick="toggleDropdown(false, event);">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </form>
+        
+    </div>
+  </div>
+
+  <main id="main-slider">  
+
+    <div id="main-processing" class="main-page">
+      <div class="main-content">
+        <section class="overall-sentiment-section process-section">
+        <div class="begin-processing-container overall-sent-begin-processing-container">
+          <div class="begin-processing-header">
+            <h2>Process Overall Sentiment</h2>
+            <svg class="processing-start-stop-icon" width="30" height="30" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+              <path class="icon-path" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2M9.5 16.5v-9l7 4.5z"/>
+            </svg>
+          </div>
+
+          <div class="process-progress">
+
+              <div class="info-card filter-info first-info-card-processing">
+                <span class="info-subheading">
+                  <span class="info-stat active-operators-stat">100</span>
+                  <span class="active-operator-plural">Operator</span>
+                  <span class="dot">•</span>
+                  <span class="info-stat active-min-date-stat">2023-01-01</span>
+                  <span class="dot">-</span>
+                  <span class="info-stat active-max-date-stat">2023-04-01</span>
+                </span>
+              </div>
+
+            Progress: 20%
+
+            <div class="progress-bar-track">
+              <div id="overall-sentiment-progress-bar" class="progress-bar-indicator"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="info-section inner">
+          <div class="info-card filter-info first-info-card">
+            To Process:
+            <span class="info-subheading">
+              <span class="info-stat active-operators-stat">100</span>
+              <span class="active-operator-plural">Operator</span>
+              <span class="dot">•</span>
+              <span class="info-stat active-min-date-stat">2023-01-01</span>
+              <span class="dot">-</span>
+              <span class="info-stat active-max-date-stat">2023-04-01</span>
+            </span>
+          </div>
+
+          <div class="info-card filter-info">
+            <p>
+              <span class="info-subheading">
+                Example restaurant has a 
+                <span class="neutral-sentiment-text">decent atmosphere</span>, and the staff were
+                <span class="positive-sentiment-text">super friendly</span>. Food was
+                <span class="negative-sentiment-text">served cold</span>, though.
+                <span class="sentiment-result">Overall Sentiment: Moderately Positive</span>
+              </span>
+            </p>
+          </div>
+        </div>        
+
+        <div class="stat-info-wrapper">
+          <div class="stat-refresh-status">
+            <span class="stat-rotation-time-since-text">...</span>
+            <svg class="stat-rotation-time-since-icon" focusable="false" aria-hidden="true" viewBox="0 0 24 24">
+              <path class="icon-path" d="M11 8.75v3.68c0 .35.19.68.49.86l3.12 1.85c.36.21.82.09 1.03-.26.21-.36.1-.82-.26-1.03l-2.87-1.71v-3.4c-.01-.4-.35-.74-.76-.74s-.75.34-.75.75m10 .75V4.21c0-.45-.54-.67-.85-.35l-1.78 1.78c-1.81-1.81-4.39-2.85-7.21-2.6-4.19.38-7.64 3.75-8.1 7.94C2.46 16.4 6.69 21 12 21c4.59 0 8.38-3.44 8.93-7.88.07-.6-.4-1.12-1-1.12-.5 0-.92.37-.98.86-.43 3.49-3.44 6.19-7.05 6.14-3.71-.05-6.84-3.18-6.9-6.9C4.94 8.2 8.11 5 12 5c1.93 0 3.68.79 4.95 2.05l-2.09 2.09c-.32.32-.1.86.35.86h5.29c.28 0 .5-.22.5-.5" />
+            </svg>
+
+
+          </div>
+
+          <div class="stat-progress-container" id="stat-rotation-progress-container">
+            <div class="stat-rotation-progress-text">
+              <span class="rotation-text">
+                <span class="rotation-index"></span>
+                <svg class="pause-icon stat-start-stop-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                  <path class="icon-path" d="M6 19h4V5H6zm8-14v14h4V5z"/>
+                </svg>
+                <span class="rotation-category-name"></span>
+              </span>
+            </div>
+            <span class="stat-rotation-progress-bar"></span>
+          </div>
+
+      
+          <div class="info-section sentiment-info-section">
+
+            <div class="info-card">Processed <span class="info-subheading">Total</span> <span class="info-stat" id="overall-sentiment-processed-pct"></span></div>
+            <div class="info-card">Average Sentiment <span class="info-subheading">Overall</span> <span class="info-stat" id="overall-sentiment-average-sentiment"></span></div>
+            <div class="info-card">Positive Sentiment <span class="info-subheading">Overall</span> <span class="info-stat" id="overall-sentiment-highest-sentiment"></span></div>
+            <div class="info-card">Count of Reviews <span class="info-subheading">With Text</span> <span class="info-stat" id="overall-sentiment-lowest-sentiment"></span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="phrase-sentiment-section process-section">
+        <div class="begin-processing-container phrase-begin-processing-container">
+          <div class="begin-processing-header">
+            <h2>Process Phrase Sentiment</h2>
+            <svg class="processing-start-stop-icon" width="30" height="30" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+              <path class="icon-path" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2M9.5 16.5v-9l7 4.5z"/>
+            </svg>
+          </div>
+
+          <div class="process-progress">
+
+            <div class="info-card filter-info first-info-card-processing">
+              <span class="info-subheading">
+                <span class="info-stat active-operators-stat">100</span>
+                <span class="active-operator-plural">Operator</span>
+                <span class="dot">•</span>
+                <span class="info-stat active-phrases-stat">20</span>
+                <span class="active-phrase-plural">Phrase</span>
+                <span class="dot">•</span>
+                <span class="info-stat active-min-date-stat">2023-01-01</span>
+                <span class="dot">-</span>
+                <span class="info-stat active-max-date-stat">2023-04-01</span>
+              </span>
+            </div>
+
+            Progress: 20%
+            <div class="progress-bar-track">
+              <div id="phrase-sentiment-progress-bar" class="progress-bar-indicator"></div>
+            </div>
+          </div>
+        </div>
+
+  
+        <div class="info-section inner">
+          <div class="info-card filter-info first-info-card">
+            To Process:
+            <span class="info-subheading">
+              <span class="info-stat active-operators-stat">100</span>
+              <span class="active-operator-plural">Operator</span>
+              <span class="dot">•</span>
+              <span class="info-stat active-phrases-stat">20</span>
+              <span class="active-phrase-plural">Phrase</span>
+              <span class="dot">•</span>
+              <span class="info-stat active-min-date-stat">2023-01-01</span>
+              <span class="dot">-</span>
+              <span class="info-stat active-max-date-stat">2023-04-01</span>
+            </span>
+
+          </div>
+
+          <div class="info-card filter-info">
+            <p>
+              <span class="info-subheading">
+                Example restaurant has a decent atmosphere,
+                and the 
+                <span class="positive-sentiment-text">staff</span>
+                were 
+                <span class="positive-sentiment-text">super friendly</span>.
+                Food was served cold, though.
+                
+                <span class="sentiment-result">'Staff' Sentiment: Extremely Positive</span>
+              </span>
+            </p>
+          </div>
+        </div>
+
+
+        <div class="global-filter-container">
+          <form id="phrase-form" method="post" class="form">
+            <div id="select-container-phrase" class="select-container filter-item multiselect">
+              <div id="selectPhrase" class="select-box"  onclick="toggleDropdown(true, event)">
+                <input type="text" id="phraseInput" class="select-text-input" placeholder="Select Phrases" autocomplete="off" spellcheck="false" oninput="filterSelections(event)"/>
+                <div id="select-overlay" class="select-overlay"> <!-- Select Operators -->
+                  <div class="arrow-icon-wrapper">
+                    <svg class="arrow" width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path class="icon-path" d="M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+    
+              <div id="drop-down-phrase" class="drop-down-container">
+                <div id="drop-down-body" class="drop-down-body">
+                  <div class="drop-down-items">
+                    <div class="drop-down-row-wrapper selectall-row-wrapper">
+                      <div class="drop-down-row label selectall-label">
+                        <label for="selectall-phrase-checkbox">
+                            <span class="checkbox-label-text">Select All</span>
+                        </label>
+                      </div>
+                      <div class="drop-down-row checkbox checkbox_selectall">
+                        <input type="checkbox" id="selectall-phrase-checkbox" name="Select All" value="Select All" class="checkbox-input"
+                        {% if selected_phrases|length == existing_phrases|length %} checked {% endif %}
+                        />
+                      </div>
+                    </div>
+    
+                    {% for phrase in existing_phrases %}
+                    {% set selected_phrase_names = selected_phrases | map(attribute='Phrase') | list %}
+
+                    <div class="drop-down-row-wrapper selection-row-wrapper">
+                        <div id="label_{{ loop.index }}" class="drop-down-row label">
+                            <label for="phrase_checkbox_{{ loop.index }}">
+                                <span id="checkbox-label-text" class="checkbox-label-text">{{ phrase.Phrase }}</span>
+                            </label>
+                        </div>
+                    
+                        <div class="drop-down-row checkbox checkbox_{{ loop.index }}">
+                            <input type="checkbox" id="phrase_checkbox_{{ loop.index }}" name="selection-phrase" value="{{ phrase.Phrase }}" class="checkbox-input"
+                            {% if phrase.Phrase in selected_phrase_names %} checked {% endif %}
+                            />
+                        </div>
+                    </div>
+                    {% endfor %}
+                  </div>
+                </div>
+    
+                <div id="phrase-button-container" class="button-container">
+                  <button type="submit" class="ripple-btn ok-button" style="float: left;" onclick="toggleDropdown(false, event)">Apply</button>
+                  <button type="button" class="ripple-btn cancel-button" style="float: right;" onclick="toggleDropdown(false, event);">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+
+
+        <div class="stat-info-wrapper">
+          <div class="stat-refresh-status">
+            <span class="stat-rotation-time-since-text">...</span>
+            <svg class="stat-rotation-time-since-icon" focusable="false" aria-hidden="true" viewBox="0 0 24 24">
+              <path class="icon-path" d="M11 8.75v3.68c0 .35.19.68.49.86l3.12 1.85c.36.21.82.09 1.03-.26.21-.36.1-.82-.26-1.03l-2.87-1.71v-3.4c-.01-.4-.35-.74-.76-.74s-.75.34-.75.75m10 .75V4.21c0-.45-.54-.67-.85-.35l-1.78 1.78c-1.81-1.81-4.39-2.85-7.21-2.6-4.19.38-7.64 3.75-8.1 7.94C2.46 16.4 6.69 21 12 21c4.59 0 8.38-3.44 8.93-7.88.07-.6-.4-1.12-1-1.12-.5 0-.92.37-.98.86-.43 3.49-3.44 6.19-7.05 6.14-3.71-.05-6.84-3.18-6.9-6.9C4.94 8.2 8.11 5 12 5c1.93 0 3.68.79 4.95 2.05l-2.09 2.09c-.32.32-.1.86.35.86h5.29c.28 0 .5-.22.5-.5" />
+            </svg>
+          </div>
+          
+          <div class="stat-progress-container" id="stat-rotation-progress-container2">
+            <div class="stat-rotation-progress-text">
+              <span class="rotation-text">
+                <span class="rotation-index"></span>
+                <svg class="pause-icon stat-start-stop-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                  <path class="icon-path" d="M6 19h4V5H6zm8-14v14h4V5z"/>
+                </svg>
+                <span class="rotation-category-name"></span>
+              </span>
+            </div>
+
+            <span class="stat-rotation-progress-bar"></span>
+          </div>
+
+            <div class="info-section phrase-info-section">
+
+              <div class="info-card">Best Scoring Phrase <span class="info-subheading" id="most-positive-phrase-name"></span> <span class="info-stat" id="most-positive-phrase-sentiment"></span> </div>
+              <div class="info-card">Worst Scoring Phrase <span class="info-subheading" id="most-negative-phrase-name"></span> <span class="info-stat" id="most-negative-phrase-sentiment"></span> </div>
+
+              <div class="info-card">Positive Sentiment *
+                <span class="info-subheading">Price or Value</span>  <!-- for specific phrases, could do 'month with highest score in date range'--> 
+                <span class="info-stat">4.7</span> </div>
+
+              <div class="info-card">Lowest Avg. Sentiment *<span class="info-subheading">Cleanliness</span> <span class="info-stat">3.9</span> </div>
+            </div>  
+            
+        </div>  
+
+      </section>
+      <section id="summary-section" class="summary-section process-section">
+
+        <div class="begin-processing-container summary-begin-processing-container">
+          <div class="begin-processing-header">
+            <h2>Process Summaries</h2>
+            <svg class="processing-start-stop-icon" width="30" height="30" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+              <path class="icon-path" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2M9.5 16.5v-9l7 4.5z"/>
+            </svg>
+          </div>
+
+          <div class="process-progress">
+            <div class="info-card filter-info first-info-card-processing">
+              <span class="info-subheading">
+                <span class="info-stat active-operators-stat">100</span>
+                <span class="active-operator-plural">Operator</span>
+                <span class="dot">•</span>
+                <span class="info-stat">10000</span>
+                Venues
+                <span class="dot">•</span>
+                <span class="info-stat">12 months</span>
+    
+              </span>
+            </div>
+
+            Progress: 20%
+
+            <div class="progress-bar-track">
+              <div id="summary-progress-bar" class="progress-bar-indicator"></div>
+            </div>
+          </div>
+        </div>
+
+
+        <div class="info-section inner">
+          <div class="info-card filter-info first-info-card">
+            To Process:
+            <span class="info-subheading">
+              <span class="info-stat active-operators-stat">100</span>
+              <span class="active-operator-plural">Operator</span>
+              <span class="dot">•</span>
+              <span class="info-stat">10000</span>
+              Venues
+              <span class="dot">•</span>
+              <span class="info-stat">12 months</span>
+
+            </span>
+          </div>
+
+          <div class="info-card filter-info">
+            <p>
+              <span class="info-subheading">
+                Example restaurant is reviewed positively, with many reviews often mentioning the friendly staff. However, some users discuss long wait times.
+              </span>
+            </p>
+          </div>
+        </div>
+
+        <div class="stat-info-wrapper">
+          <div class="stat-refresh-status">
+            <span class="stat-rotation-time-since-text">...</span>
+            <svg class="stat-rotation-time-since-icon" focusable="false" aria-hidden="true" viewBox="0 0 24 24">
+              <path class="icon-path" d="M11 8.75v3.68c0 .35.19.68.49.86l3.12 1.85c.36.21.82.09 1.03-.26.21-.36.1-.82-.26-1.03l-2.87-1.71v-3.4c-.01-.4-.35-.74-.76-.74s-.75.34-.75.75m10 .75V4.21c0-.45-.54-.67-.85-.35l-1.78 1.78c-1.81-1.81-4.39-2.85-7.21-2.6-4.19.38-7.64 3.75-8.1 7.94C2.46 16.4 6.69 21 12 21c4.59 0 8.38-3.44 8.93-7.88.07-.6-.4-1.12-1-1.12-.5 0-.92.37-.98.86-.43 3.49-3.44 6.19-7.05 6.14-3.71-.05-6.84-3.18-6.9-6.9C4.94 8.2 8.11 5 12 5c1.93 0 3.68.79 4.95 2.05l-2.09 2.09c-.32.32-.1.86.35.86h5.29c.28 0 .5-.22.5-.5" />
+            </svg>
+          </div>
+
+          <div class="stat-progress-container" id="stat-rotation-progress-container">
+            <div class="stat-rotation-progress-text">
+              <span class="rotation-text">
+                <span class="rotation-index"></span>
+                <svg class="pause-icon stat-start-stop-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                  <path class="icon-path" d="M6 19h4V5H6zm8-14v14h4V5z"/>
+                </svg>
+                <span class="rotation-category-name"></span>
+              </span>
+
+            </div>
+            <span class="stat-rotation-progress-bar"></span>
+          </div>
+
+            <div class="info-section summary-info-section">
+              <div class="info-card">Processed *<span class="info-subheading">Total</span> <span class="info-stat">50%</span> </div>
+              <div class="info-card">Venue Count *<span class="info-subheading">Overall</span> <span class="info-stat">2562</span> </div>
+              <div class="info-card">Most Recent Process *<span class="info-subheading">Reporting Month</span> <span class="info-stat">Apr-2025</span> </div>
+              <div class="info-card">Timespan Mode *<span class="info-subheading">Months (% of Total) </span> <span class="info-stat">12 (94%) </span> </div>      
+            </div>  
+            
+        </div>
+        </section>
+
+      </div>
+
+    </div>
+
+    <div id="main-dashboard" class="main-page">
+      <div class="main-content">
+        <section class="dashboard-nav">
+          <div class="info-section button-container">
+          <div class="section-heading">Chart</div>
+            <button class="ripple-btn persistent-btn" id="overviewPage-btn">Overall Sentiment</button>
+            <button class="two-cards ripple-btn persistent-btn" id="sentimentPage-btn">Phrase Sentiment</button>
+            <button class="ripple-btn persistent-btn" id="twoPage-btn">2 Charts</button>
+            <button class="ripple-btn persistent-btn" id="threePage-btn">3 Charts</button>
+            <button class="ripple-btn persistent-btn"></button>
+
+          <div class="section-heading">Table</div>
+            <button class="four-cards ripple-btn persistent-btn">All Reviews</button>
+
+          </div>
+
+        </section>
+
+        <section class="dashboard-graph"> 
+          <div class="info-section">
+
+            <div class="info-card shrunk" id="info-card1">
+              <canvas class="chart" id="chart1"></canvas>
+            </div>
+
+            <div class="info-card shrunk" id="info-card2">
+              <canvas class="chart" id="chart2"></canvas>
+            </div>
+
+            <div class="info-card shrunk" id="info-card3">
+              <canvas class="chart" id="chart3"></canvas>
+            </div>   
+                     
+            <div class="info-card shrunk" id="info-card4">
+              <canvas class="chart" id="chart4"></canvas>
+            </div>
+
+          </div>
+        </section>
+
+        <section class="dashboard-info">
+          <div class="info-section">
+            <div class="info-card">Processed <span class="info-subheading">Total</span> <span class="info-stat" id="overall-sentiment-processed-pct">99.7%</span></div>
+            <div class="info-card">Average Sentiment <span class="info-subheading">Overall</span> <span class="info-stat" id="overall-sentiment-average-sentiment">4.7</span></div>
+            <div class="info-card">Positive Sentiment <span class="info-subheading">Operator</span> <span class="info-stat" id="overall-sentiment-highest-sentiment">JDW: 4.5</span></div>
+            <div class="info-card">Lowest Avg. Sentiment <span class="info-subheading">Operator</span> <span class="info-stat" id="overall-sentiment-lowest-sentiment">F&B: 3.2</span></div>
+            <div class="info-card">Lowest Avg. Sentiment <span class="info-subheading">Operator</span> <span class="info-stat" id="overall-sentiment-lowest-sentiment">F&B: 3.2</span></div>
+
+          </div>
+        </section>
+
+      </div>
+    </div>
+    
+    <div id="main-aqa" class="main-page">
+      <div class="main-content">
+        <section id="yo"> balshdflashd </section>
+      </div>
+    </div>
+
+  </main>
+
+
+  <div class="active-processing-pill">Processing Overall Sentiment... 20%</div>  
+  
+  <!-- install Better Jinja extension, then set VS Code syntax highlighting to 'Jinja HTML' from 'HTML' in bottom right -->
+  <script>
+    const operators = {{ existing_operators_json | safe}};
+    const phrases = {{ existing_phrases_json | safe}};
+
+  </script>
+
+{% endblock %}
