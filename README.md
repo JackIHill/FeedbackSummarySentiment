@@ -3,7 +3,8 @@ Summarise and analyse the sentiment of Google / Tripadvisor restaurant and pub r
 Processing             |  Dashboard
 :-------------------------:|:-------------------------:
 ![Processing Page Actions](assets/ProcessingPageActionsCrop.gif) |  ![Dashboard Page Actions](assets/DashboardPageActionsCrop.gif)
-![Processing Page](assets/ProcessingPage.png) | ![Dashboard Page](assets/DashboardPage.png)
+<details><summary>Show Static Processing Page</summary><img src="assets/ProcessingPage.png" alt="Processing Page" /></details><details><summary>Show Static Dashboard Page</summary><img src="assets/DashboardPage.png" alt="Dashboard Page" /></details>
+
 
 Red tables denote those that store sentiment/summarisation info.
 
