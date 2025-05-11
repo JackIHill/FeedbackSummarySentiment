@@ -2203,63 +2203,217 @@ function switchSvgIconOnStartStop(svgClass, dStart, dStop, rotationDegrees = 90,
     threePage: {
       chart1: {
         options: {
+          responsive: true,
           plugins: {
+            title: {
+              display: true,
+              text: 'Operator: Review vs Sentiment Score'
+            },
             legend: {
-              display: false
+              position: 'top'
+            }
+          },
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: 'Operator'
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Average Review Rating'
+              },
+              suggestedMin: 0,
+              suggestedMax: 5
+            },
+            ySentiment: {
+              type: 'linear',
+              position: 'right',
+              title: {
+                display: true,
+                text: 'Avg Sentiment Score'
+              },
+              grid: {
+                drawOnChartArea: false // to avoid overlapping grid lines
+              },
+              suggestedMin: -1,
+              suggestedMax: 1,
             }
           }
         },
         type: 'bar',
-        xTitle: 'x',
-        yTitle: 'y',
-        api: '/api/graph/reviewrating_by_overall_sentiment',
+        title: 'Average Sentiment by Operator',
+        xTitle: 'Operator',
+        // yTitle: 'Average Review Rating',
+        api: '/api/graph/reviewrating_by_overall_sentiment_data',
         mapData: data => ({
           labels: data.map(d => d.OperatorName),
-          datasets: [{
-            label: '',
-            data: data.map(d => d.higherSentiment),
-          }]
+          datasets: [
+            {
+              label: 'Avg Review Rating',
+              data: data.map(d => d.AvgReviewRating),
+              pointRadius: 6,
+              order: 2
+            },
+            {
+              label: 'Avg Sentiment Score',
+              data: data.map(d => d.AvgSentimentScore),
+              yAxisID: 'ySentiment',
+              backgroundColor: getCSSVar('positive-sentiment-text-color'),
+              // borderColor: 'blue', // line color if true
+              type: 'line',
+              showLine: false,
+              pointRadius: 6,
+              order: 1
+            }
+          ]
         })
       },
+
       chart2: {
-          options: {
+        type: 'pie',
+        api: '/api/graph/overall_sentiment_portion',
+        options: {
           plugins: {
+            tooltip: {
+              callbacks: {
+                label: (context) => {
+                  const value = context.raw;
+                  // Get total value of the dataset
+                  const total = context.chart._metasets[0].total;
+                  const percentage = ((value / total) * 100).toFixed(1);
+
+                  // thousands separator
+                  const formattedValue = value.toLocaleString();
+
+                  return `${formattedValue} (${percentage}%)`;
+                }
+              }
+            },
+            title: {
+              display: true,
+              text: 'Portion of Sentiment Scores over Selected Operators',
+              padding: {
+                bottom: 40
+              },
+            },
             legend: {
               display: false
+            },
+            datalabels: {
+              // label color set in updateChartTheme()
+              font: {
+                size: 14,
+                weight: 'bold',
+              },
+              anchor: 'end',
+              align: 'end',
+              offset: 10, 
+              clamp: true,
+              formatter: (value, context) => {
+                return context.chart.data.labels[context.dataIndex];
+              }
+            }
+          },
+          layout: {
+            padding: {
+              top: 10,
+              bottom: 30
+            }
+          },
+          scales: {
+            y: {
+              display: false
+            }
+          },
+          elements: {
+            arc: {
+              // borderColor: getCSSVar('tertiary-color'),
+              borderWidth: 0 // segment gap
             }
           }
         },
-        type: 'bar',
-        xTitle: 'x',
-        yTitle: 'y',
-        api: '/api/graph/reviewrating_by_overall_sentiment',
         mapData: data => ({
-          labels: data.map(d => d.OperatorName),
+          labels: data.map(d => d.SentimentScore),
           datasets: [{
-            label: '',
-            data: data.map(d => d.higherSentiment),
+            label: 'Count Sentiment Score',
+            data: data.map(d => d.CountSentimentScore)
+            // segment color set in updateChartTheme()
           }]
         })
+
       },
+
       chart3: {
-          options: {
+        type: 'line',
+        api: '/api/graph/AvgSentimentOverTime',
+        mapData: data => {
+          const ratings = [3, 4, 5];
+          const colors = ['#FF5733', '#FFBD33', '#33FF57', '#3377FF', '#9933FF'];
+          
+          return {
+            labels: data.map(d => d.ReviewYear),
+            datasets: ratings.map((rating, i) => ({
+              label: `Rating: ${rating}`,
+              borderColor: colors[i],
+              backgroundColor: colors[i],
+              fill: false,
+              tension: 0.5, // the 'curvature' of the line
+              pointHoverRadius: 5,
+              pointHitRadius: 10,
+              pointRadius: 1,
+              data: data.map(d => {
+                const entry = data.find(e => 
+                  Number(e.ReviewYear) === Number(d.ReviewYear) && 
+                  Number(e.ReviewRating) === Number(rating)
+                );
+
+                return entry ? (entry.RatingProportion * 100).toFixed(0) : 0;
+              })
+            }))
+          };
+        },
+        options: {
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: 'Year'
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Rating Proportion (%)'
+              },
+              // type: 'logarithmic',
+              ticks: {
+                min: 1,
+                suggestedMax: 100,
+                callback: function(value) {
+                  return value;
+                }
+              }
+            }
+          },
           plugins: {
-            legend: {
-              display: false
+            title: {
+              display: true,
+              text: 'Average Sentiment Over Time'
+            },
+            tooltip: {
+              callbacks: {
+                label: function(tooltipItem) {
+                  // Get the rating proportion value and format it as a percentage
+                  let rating = tooltipItem.raw;
+                  return `Rating: ${rating}%`; // Format as "Rating: 25%" for example
+                }
+              }
             }
           }
-        },
-        type: 'bar',
-        xTitle: 'x',
-        yTitle: 'y',
-        api: '/api/graph/reviewrating_by_overall_sentiment',
-        mapData: data => ({
-          labels: data.map(d => d.OperatorName),
-          datasets: [{
-            label: '',
-            data: data.map(d => d.higherSentiment),
-          }]
-        })
+        }
       }
       // ...
     }
